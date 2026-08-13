@@ -1343,6 +1343,30 @@ function cancelPromptForm(){
   document.getElementById('newPromptForm').classList.remove('open');
   editingPromptId = null;
 }
+function compressImage(file, maxDim, quality){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      let w = img.width, h = img.height;
+      if(w >= h){
+        if(w > maxDim){ h = Math.round(h * maxDim / w); w = maxDim; }
+      }else{
+        if(h > maxDim){ w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(blob=>{
+        if(blob) resolve(blob); else reject(new Error('画像の圧縮に失敗しました'));
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('画像の読み込みに失敗しました')); };
+    img.src = url;
+  });
+}
+
 async function savePromptForm(){
   const name = document.getElementById('np-name').value.trim();
   const japaneseTags = document.getElementById('np-ja-tags').value.trim();
@@ -1357,11 +1381,13 @@ async function savePromptForm(){
 
   if(selectedThumbFile){
     const statusEl = document.getElementById('np-thumb-status');
-    statusEl.textContent = '画像をアップロード中…';
+    statusEl.textContent = '画像を圧縮しています…';
     try{
+      const compressed = await compressImage(selectedThumbFile, 640, 0.75);
+      statusEl.textContent = '画像をアップロード中…';
       const path = `users/${currentUser.uid}/thumbnails/${savedId}.jpg`;
       const storageRef = window.fb.ref(window.fb.storageFb, path);
-      await window.fb.uploadBytes(storageRef, selectedThumbFile);
+      await window.fb.uploadBytes(storageRef, compressed);
       thumbnailUrl = await window.fb.getDownloadURL(storageRef);
       statusEl.textContent = '';
     }catch(e){
@@ -1468,7 +1494,7 @@ function renderPromptList(){
       if(p.thumbnailUrl){
         const thumbBig = document.createElement('img');
         thumbBig.src = p.thumbnailUrl;
-        thumbBig.style.cssText = 'width:110px;height:110px;object-fit:cover;border-radius:8px;margin-bottom:10px;cursor:pointer;display:block;';
+        thumbBig.style.cssText = 'width:100px;height:auto;border-radius:8px;margin-bottom:10px;cursor:pointer;display:block;';
         thumbBig.title = 'タップで拡大';
         thumbBig.addEventListener('click', (ev)=>{ ev.stopPropagation(); window.open(p.thumbnailUrl, '_blank'); });
         card.appendChild(thumbBig);
