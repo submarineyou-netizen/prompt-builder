@@ -1450,6 +1450,7 @@ function renderPromptList(){
   list.forEach(p=>{
     const card = document.createElement('div');
     card.className='card';
+    const finalPos = assembledPositive(p);
 
     const head = document.createElement('div');
     head.className='card-head';
@@ -1457,13 +1458,55 @@ function renderPromptList(){
     if(p.thumbnailUrl){
       const thumb = document.createElement('img');
       thumb.src = p.thumbnailUrl;
-      thumb.style.cssText = 'width:32px;height:32px;object-fit:cover;border-radius:6px;flex-shrink:0;';
+      thumb.style.cssText = 'width:24px;height:auto;border-radius:5px;flex-shrink:0;';
       head.appendChild(thumb);
     }
     const nameSpan = document.createElement('span');
     nameSpan.className='card-name';
     nameSpan.textContent = p.name;
     head.appendChild(nameSpan);
+
+    const copyPos = document.createElement('button');
+    copyPos.className='btn small';
+    copyPos.textContent='Positiveコピー';
+    copyPos.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      navigator.clipboard.writeText(finalPos);
+      copyPos.textContent='✓ コピーしました'; setTimeout(()=>{copyPos.textContent='Positiveコピー';},1200);
+    });
+    head.appendChild(copyPos);
+
+    const cloneBtn = document.createElement('button');
+    cloneBtn.className='btn small';
+    cloneBtn.textContent='複製して編集';
+    cloneBtn.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      const clone = {id:uid(), name:p.name+' のコピー', japaneseTags:p.japaneseTags||'', japaneseSentence:p.japaneseSentence||'', positiveSentence:p.positiveSentence||'', thumbnailUrl:p.thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:p.id};
+      prompts.unshift(clone);
+      await savePrompts();
+      openEditForm(clone);
+      renderPromptList();
+    });
+    head.appendChild(cloneBtn);
+
+    const editBtn = document.createElement('button');
+    editBtn.className='btn small';
+    editBtn.textContent='編集';
+    editBtn.addEventListener('click', (ev)=>{ ev.stopPropagation(); openEditForm(p); });
+    head.appendChild(editBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className='btn small danger';
+    delBtn.textContent='削除';
+    delBtn.addEventListener('click', async (ev)=>{
+      ev.stopPropagation();
+      if(!confirm(`「${p.name}」を削除しますか？`)) return;
+      prompts = prompts.filter(x=>x.id!==p.id);
+      await savePrompts();
+      renderPromptList();
+    });
+    head.appendChild(delBtn);
+
     const badge = document.createElement('span');
     badge.className='badge '+statusClass(p.status);
     badge.textContent = statusLabel(p.status);
@@ -1494,7 +1537,7 @@ function renderPromptList(){
       if(p.thumbnailUrl){
         const thumbBig = document.createElement('img');
         thumbBig.src = p.thumbnailUrl;
-        thumbBig.style.cssText = 'width:100px;height:auto;border-radius:8px;margin-bottom:10px;cursor:pointer;display:block;';
+        thumbBig.style.cssText = 'width:50px;height:auto;border-radius:8px;margin-bottom:10px;cursor:pointer;display:block;';
         thumbBig.title = 'タップで拡大';
         thumbBig.addEventListener('click', (ev)=>{ ev.stopPropagation(); window.open(p.thumbnailUrl, '_blank'); });
         card.appendChild(thumbBig);
@@ -1522,7 +1565,6 @@ function renderPromptList(){
         card.appendChild(jaText);
       }
 
-      const finalPos = assembledPositive(p);
       const posLabel = document.createElement('div');
       posLabel.className='card-text-label';
       posLabel.textContent='Positive（完成形：trigger word・品質タグ込み）';
@@ -1531,49 +1573,6 @@ function renderPromptList(){
       posText.className='card-text';
       posText.textContent = finalPos || '（Positive自由文章は未入力）';
       card.appendChild(posText);
-
-      const actions = document.createElement('div');
-      actions.className='card-actions';
-
-      const copyPos = document.createElement('button');
-      copyPos.className='btn small';
-      copyPos.textContent='Positiveコピー';
-      copyPos.addEventListener('click', ()=>{
-        navigator.clipboard.writeText(finalPos);
-        copyPos.textContent='✓ コピーしました'; setTimeout(()=>{copyPos.textContent='Positiveコピー';},1200);
-      });
-      actions.appendChild(copyPos);
-
-      const cloneBtn = document.createElement('button');
-      cloneBtn.className='btn small';
-      cloneBtn.textContent='複製して編集';
-      cloneBtn.addEventListener('click', async ()=>{
-        const clone = {id:uid(), name:p.name+' のコピー', japaneseTags:p.japaneseTags||'', japaneseSentence:p.japaneseSentence||'', positiveSentence:p.positiveSentence||'', thumbnailUrl:p.thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:p.id};
-        prompts.unshift(clone);
-        await savePrompts();
-        openEditForm(clone);
-        renderPromptList();
-      });
-      actions.appendChild(cloneBtn);
-
-      const editBtn = document.createElement('button');
-      editBtn.className='btn small';
-      editBtn.textContent='編集';
-      editBtn.addEventListener('click', ()=>{ openEditForm(p); });
-      actions.appendChild(editBtn);
-
-      const delBtn = document.createElement('button');
-      delBtn.className='btn small danger';
-      delBtn.textContent='削除';
-      delBtn.addEventListener('click', async ()=>{
-        if(!confirm(`「${p.name}」を削除しますか？`)) return;
-        prompts = prompts.filter(x=>x.id!==p.id);
-        await savePrompts();
-        renderPromptList();
-      });
-      actions.appendChild(delBtn);
-
-      card.appendChild(actions);
     }
 
     area.appendChild(card);
