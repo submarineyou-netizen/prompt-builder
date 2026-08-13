@@ -76,7 +76,18 @@
   .badge.untested{background:var(--panel-2);color:var(--text-3);}
   .badge.good{background:var(--green-dim);color:var(--green);}
   .badge.needswork{background:var(--amber-dim);color:var(--amber);}
+  .btn.status-untested{background:var(--panel-2);color:var(--text-3);border-color:var(--border-strong);}
+  .btn.status-good{background:var(--green-dim);color:var(--green);border-color:var(--green);}
+  .btn.status-needswork{background:var(--amber-dim);color:var(--amber);border-color:var(--amber);}
   .card-text-label{font-size:10.5px;color:var(--text-3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em;margin:8px 0 3px;}
+  .prompt-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(120px, 1fr));gap:10px;margin-bottom:12px;}
+  .prompt-block{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;}
+  .prompt-block:hover{border-color:var(--teal);}
+  .prompt-block-thumb{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--panel-2);}
+  .prompt-block-thumb-empty{display:flex;align-items:center;justify-content:center;}
+  .prompt-block-name{font-size:12.5px;font-weight:600;padding:8px 8px 4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.6em;line-height:1.3;}
+  .prompt-block-actions{display:flex;gap:6px;padding:0 8px 8px;}
+  .prompt-block-actions .btn{flex:1;padding:4px 6px;font-size:11px;}
   .card-text{font-size:13px;background:var(--panel-2);border-radius:6px;padding:8px 10px;white-space:pre-wrap;word-break:break-word;}
   .card-text.neg{color:var(--rose);}
   .card-note{font-size:12.5px;color:var(--text-2);font-style:italic;margin-top:8px;}
@@ -202,6 +213,19 @@
             <button class="btn small orange" id="np-name-save" title="保存" style="flex:1;">保存</button>
           </div>
           <button class="btn small primary" id="np-name-copy-pos" style="width:100%;">Positiveをコピー</button>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:8px;">
+        <label>カテゴリ（任意）</label>
+        <input type="text" id="np-category" list="promptCategoryOptions" placeholder="例：水着 / セーラー服 など">
+        <datalist id="promptCategoryOptions"></datalist>
+      </div>
+      <div class="field" id="np-meta-row" style="margin-bottom:8px;display:none;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <button class="btn small" id="np-status-btn"></button>
+          <span id="np-meta-timestamp" style="font-size:11.5px;color:var(--text-3);"></span>
+          <button class="btn small" id="np-clone-btn" style="margin-left:auto;">複製して編集</button>
+          <button class="btn small danger" id="np-delete-btn">削除</button>
         </div>
       </div>
       <div class="field" style="margin-bottom:8px;">
@@ -353,7 +377,7 @@ let prompts = [];
 let editingPromptId = null;
 let selectedThumbFile = null;
 let thumbRemoved = false;
-let expandedPromptId = null;
+let expandedPromptCats = new Set();
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
 
@@ -1330,9 +1354,11 @@ document.getElementById('np-thumb-remove').addEventListener('click', ()=>{
 document.getElementById('newPromptBtn').addEventListener('click', ()=>{
   editingPromptId = null;
   document.getElementById('np-name').value='';
+  document.getElementById('np-category').value='';
   document.getElementById('np-ja-tags').value='';
   document.getElementById('np-ja-sentence').value='';
   document.getElementById('np-pos-sentence').value='';
+  document.getElementById('np-meta-row').style.display='none';
   resetThumbField();
   document.getElementById('newPromptForm').classList.add('open');
   renderAllTagChips();
@@ -1372,6 +1398,7 @@ async function savePromptForm(){
   const japaneseTags = document.getElementById('np-ja-tags').value.trim();
   const japaneseSentence = document.getElementById('np-ja-sentence').value.trim();
   const positiveSentence = document.getElementById('np-pos-sentence').value.trim();
+  const category = document.getElementById('np-category').value.trim();
   if(!name){
     alert('保存できませんでした。名前が空欄です。');
     return;
@@ -1400,15 +1427,14 @@ async function savePromptForm(){
 
   if(editingPromptId){
     const p = prompts.find(x=>x.id===editingPromptId);
-    if(p){ p.name=name; p.japaneseTags=japaneseTags; p.japaneseSentence=japaneseSentence; p.positiveSentence=positiveSentence; p.thumbnailUrl=thumbnailUrl||null; p.updatedAt=Date.now(); }
+    if(p){ p.name=name; p.category=category; p.japaneseTags=japaneseTags; p.japaneseSentence=japaneseSentence; p.positiveSentence=positiveSentence; p.thumbnailUrl=thumbnailUrl||null; p.updatedAt=Date.now(); }
   }else{
-    const np = {id:savedId, name, japaneseTags, japaneseSentence, positiveSentence, thumbnailUrl:thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:null};
+    const np = {id:savedId, name, category, japaneseTags, japaneseSentence, positiveSentence, thumbnailUrl:thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:null};
     prompts.unshift(np);
   }
   await savePrompts();
   document.getElementById('newPromptForm').classList.remove('open');
   editingPromptId = null;
-  expandedPromptId = savedId;
   renderPromptList();
 }
 function copyLivePositive(btn){
@@ -1438,6 +1464,7 @@ function renderPromptList(){
   if(q){
     list = prompts.filter(p=>
       p.name.toLowerCase().includes(q) ||
+      (p.category||'').toLowerCase().includes(q) ||
       (p.japaneseTags||'').toLowerCase().includes(q) ||
       (p.japaneseSentence||'').toLowerCase().includes(q) ||
       (p.positiveSentence||'').toLowerCase().includes(q)
@@ -1447,138 +1474,130 @@ function renderPromptList(){
     area.innerHTML = `<div class="empty">${q ? '一致するプロンプトがありません' : 'まだ保存されたプロンプトがありません。「+ 新しいプロンプト」から追加してください。'}</div>`;
     return;
   }
-  list.forEach(p=>{
-    const card = document.createElement('div');
-    card.className='card';
-    const finalPos = assembledPositive(p);
 
-    const head = document.createElement('div');
-    head.className='card-head';
-    head.style.cursor='pointer';
+  const catOrder = [];
+  list.forEach(p=>{
+    const c = p.category || '';
+    if(c && !catOrder.includes(c)) catOrder.push(c);
+  });
+  catOrder.push('');
+
+  const optionsList = document.getElementById('promptCategoryOptions');
+  const allCats = [];
+  prompts.forEach(p=>{ if(p.category && !allCats.includes(p.category)) allCats.push(p.category); });
+  optionsList.innerHTML = allCats.map(c=>`<option value="${c.replace(/"/g,'&quot;')}"></option>`).join('');
+
+  function buildBlock(p){
+    const block = document.createElement('div');
+    block.className = 'prompt-block';
+    block.addEventListener('click', ()=>openEditForm(p));
+
     if(p.thumbnailUrl){
       const thumb = document.createElement('img');
       thumb.src = p.thumbnailUrl;
-      const w = expandedPromptId===p.id ? 50 : 24;
-      thumb.style.cssText = `width:${w}px;height:auto;border-radius:5px;flex-shrink:0;transition:width .18s ease;`;
-      head.appendChild(thumb);
+      thumb.className = 'prompt-block-thumb';
+      block.appendChild(thumb);
+    }else{
+      const ph = document.createElement('div');
+      ph.className = 'prompt-block-thumb prompt-block-thumb-empty';
+      block.appendChild(ph);
     }
-    const nameSpan = document.createElement('span');
-    nameSpan.className='card-name';
-    nameSpan.textContent = p.name;
-    head.appendChild(nameSpan);
 
-    const copyPos = document.createElement('button');
-    copyPos.className='btn small';
-    copyPos.textContent='Positiveコピー';
-    copyPos.addEventListener('click', (ev)=>{
+    const nameEl = document.createElement('div');
+    nameEl.className = 'prompt-block-name';
+    nameEl.textContent = p.name;
+    block.appendChild(nameEl);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'prompt-block-actions';
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn small';
+    copyBtn.textContent = 'コピー';
+    copyBtn.addEventListener('click', (ev)=>{
       ev.stopPropagation();
-      navigator.clipboard.writeText(finalPos);
-      copyPos.textContent='✓ コピーしました'; setTimeout(()=>{copyPos.textContent='Positiveコピー';},1200);
+      navigator.clipboard.writeText(assembledPositive(p));
+      copyBtn.textContent='✓'; setTimeout(()=>{copyBtn.textContent='コピー';},1200);
     });
-    head.appendChild(copyPos);
-
-    const cloneBtn = document.createElement('button');
-    cloneBtn.className='btn small';
-    cloneBtn.textContent='複製して編集';
-    cloneBtn.addEventListener('click', async (ev)=>{
-      ev.stopPropagation();
-      const clone = {id:uid(), name:p.name+' のコピー', japaneseTags:p.japaneseTags||'', japaneseSentence:p.japaneseSentence||'', positiveSentence:p.positiveSentence||'', thumbnailUrl:p.thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:p.id};
-      prompts.unshift(clone);
-      await savePrompts();
-      openEditForm(clone);
-      renderPromptList();
-    });
-    head.appendChild(cloneBtn);
-
+    btnRow.appendChild(copyBtn);
     const editBtn = document.createElement('button');
-    editBtn.className='btn small';
-    editBtn.textContent='編集';
+    editBtn.className = 'btn small';
+    editBtn.textContent = '編集';
     editBtn.addEventListener('click', (ev)=>{ ev.stopPropagation(); openEditForm(p); });
-    head.appendChild(editBtn);
+    btnRow.appendChild(editBtn);
+    block.appendChild(btnRow);
 
-    const delBtn = document.createElement('button');
-    delBtn.className='btn small danger';
-    delBtn.textContent='削除';
-    delBtn.addEventListener('click', async (ev)=>{
-      ev.stopPropagation();
-      if(!confirm(`「${p.name}」を削除しますか？`)) return;
-      prompts = prompts.filter(x=>x.id!==p.id);
-      await savePrompts();
-      renderPromptList();
-    });
-    head.appendChild(delBtn);
+    return block;
+  }
 
-    const badge = document.createElement('span');
-    badge.className='badge '+statusClass(p.status);
-    badge.textContent = statusLabel(p.status);
-    badge.title='クリックで状態変更';
-    badge.addEventListener('click', async (ev)=>{
-      ev.stopPropagation();
-      const order=['untested','good','needswork'];
-      p.status = order[(order.indexOf(p.status)+1)%order.length];
-      await savePrompts();
-      renderPromptList();
-    });
-    head.appendChild(badge);
-    const meta = document.createElement('span');
-    meta.className='card-meta';
-    meta.textContent = formatTimestamp(p.updatedAt||p.createdAt);
-    head.appendChild(meta);
-    const caret = document.createElement('span');
-    caret.style.cssText='color:var(--text-3);font-size:11px;';
-    caret.textContent = expandedPromptId===p.id ? '▲' : '▼';
-    head.appendChild(caret);
-    head.addEventListener('click', ()=>{
-      expandedPromptId = (expandedPromptId===p.id) ? null : p.id;
-      renderPromptList();
-    });
-    card.appendChild(head);
+  catOrder.forEach(cat=>{
+    const items = list.filter(p=>(p.category||'')===cat);
+    if(items.length===0) return;
 
-    if(expandedPromptId===p.id){
-      if(p.japaneseTags){
-        const jaTagLabel = document.createElement('div');
-        jaTagLabel.className='card-text-label';
-        jaTagLabel.textContent='日本語タグ';
-        card.appendChild(jaTagLabel);
-        const jaTagText = document.createElement('div');
-        jaTagText.className='card-text';
-        jaTagText.style.color='var(--text-2)';
-        jaTagText.textContent = p.japaneseTags;
-        card.appendChild(jaTagText);
-      }
-      if(p.japaneseSentence){
-        const jaLabel = document.createElement('div');
-        jaLabel.className='card-text-label';
-        jaLabel.textContent='日本語プロンプト';
-        card.appendChild(jaLabel);
-        const jaText = document.createElement('div');
-        jaText.className='card-text';
-        jaText.style.color='var(--text-2)';
-        jaText.textContent = p.japaneseSentence;
-        card.appendChild(jaText);
-      }
-
-      const posLabel = document.createElement('div');
-      posLabel.className='card-text-label';
-      posLabel.textContent='Positive（完成形：trigger word・品質タグ込み）';
-      card.appendChild(posLabel);
-      const posText = document.createElement('div');
-      posText.className='card-text';
-      posText.textContent = finalPos || '（Positive自由文章は未入力）';
-      card.appendChild(posText);
+    if(cat){
+      const header = document.createElement('div');
+      header.className = 'sub-header';
+      header.style.cssText = 'padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;';
+      const isOpen = expandedPromptCats.has(cat);
+      const arrow = document.createElement('span');
+      arrow.textContent = isOpen ? '▼' : '▶';
+      arrow.style.fontSize = '10px';
+      header.appendChild(arrow);
+      const label = document.createElement('span');
+      label.textContent = `${cat} (${items.length})`;
+      header.appendChild(label);
+      header.addEventListener('click', ()=>{
+        if(expandedPromptCats.has(cat)) expandedPromptCats.delete(cat);
+        else expandedPromptCats.add(cat);
+        renderPromptList();
+      });
+      area.appendChild(header);
+      if(!isOpen) return;
     }
 
-    area.appendChild(card);
+    const grid = document.createElement('div');
+    grid.className = 'prompt-grid';
+    items.forEach(p=>grid.appendChild(buildBlock(p)));
+    area.appendChild(grid);
   });
 }
 
 function openEditForm(p){
   editingPromptId = p.id;
   document.getElementById('np-name').value = p.name;
+  document.getElementById('np-category').value = p.category||'';
   document.getElementById('np-ja-tags').value = p.japaneseTags||'';
   document.getElementById('np-ja-sentence').value = p.japaneseSentence||'';
   document.getElementById('np-pos-sentence').value = p.positiveSentence||'';
   loadThumbField(p.thumbnailUrl);
+
+  document.getElementById('np-meta-row').style.display = 'block';
+  const statusBtn = document.getElementById('np-status-btn');
+  statusBtn.className = 'btn small status-' + statusClass(p.status);
+  statusBtn.textContent = statusLabel(p.status);
+  statusBtn.onclick = async ()=>{
+    const order=['untested','good','needswork'];
+    p.status = order[(order.indexOf(p.status)+1)%order.length];
+    await savePrompts();
+    statusBtn.className = 'btn small status-' + statusClass(p.status);
+    statusBtn.textContent = statusLabel(p.status);
+  };
+  document.getElementById('np-meta-timestamp').textContent = formatTimestamp(p.updatedAt||p.createdAt);
+  document.getElementById('np-clone-btn').onclick = async ()=>{
+    const clone = {id:uid(), name:p.name+' のコピー', category:p.category||'', japaneseTags:p.japaneseTags||'', japaneseSentence:p.japaneseSentence||'', positiveSentence:p.positiveSentence||'', thumbnailUrl:p.thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:p.id};
+    prompts.unshift(clone);
+    await savePrompts();
+    openEditForm(clone);
+    renderPromptList();
+  };
+  document.getElementById('np-delete-btn').onclick = async ()=>{
+    if(!confirm(`「${p.name}」を削除しますか？`)) return;
+    prompts = prompts.filter(x=>x.id!==p.id);
+    await savePrompts();
+    document.getElementById('newPromptForm').classList.remove('open');
+    editingPromptId = null;
+    renderPromptList();
+  };
+
   document.getElementById('newPromptForm').classList.add('open');
   renderAllTagChips();
   renderNpPreview();
