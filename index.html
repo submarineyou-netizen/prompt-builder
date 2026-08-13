@@ -1468,7 +1468,7 @@ function renderPromptList(){
       if(p.thumbnailUrl){
         const thumbBig = document.createElement('img');
         thumbBig.src = p.thumbnailUrl;
-        thumbBig.style.cssText = 'width:100%;max-width:220px;border-radius:8px;margin-bottom:10px;cursor:pointer;display:block;';
+        thumbBig.style.cssText = 'width:110px;height:110px;object-fit:cover;border-radius:8px;margin-bottom:10px;cursor:pointer;display:block;';
         thumbBig.title = 'タップで拡大';
         thumbBig.addEventListener('click', (ev)=>{ ev.stopPropagation(); window.open(p.thumbnailUrl, '_blank'); });
         card.appendChild(thumbBig);
