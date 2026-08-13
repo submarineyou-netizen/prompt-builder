@@ -1458,7 +1458,8 @@ function renderPromptList(){
     if(p.thumbnailUrl){
       const thumb = document.createElement('img');
       thumb.src = p.thumbnailUrl;
-      thumb.style.cssText = 'width:24px;height:auto;border-radius:5px;flex-shrink:0;';
+      const w = expandedPromptId===p.id ? 50 : 24;
+      thumb.style.cssText = `width:${w}px;height:auto;border-radius:5px;flex-shrink:0;transition:width .18s ease;`;
       head.appendChild(thumb);
     }
     const nameSpan = document.createElement('span');
@@ -1534,14 +1535,6 @@ function renderPromptList(){
     card.appendChild(head);
 
     if(expandedPromptId===p.id){
-      if(p.thumbnailUrl){
-        const thumbBig = document.createElement('img');
-        thumbBig.src = p.thumbnailUrl;
-        thumbBig.style.cssText = 'width:50px;height:auto;border-radius:8px;margin-bottom:10px;cursor:pointer;display:block;';
-        thumbBig.title = 'タップで拡大';
-        thumbBig.addEventListener('click', (ev)=>{ ev.stopPropagation(); window.open(p.thumbnailUrl, '_blank'); });
-        card.appendChild(thumbBig);
-      }
       if(p.japaneseTags){
         const jaTagLabel = document.createElement('div');
         jaTagLabel.className='card-text-label';
