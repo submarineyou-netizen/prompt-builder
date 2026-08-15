@@ -1539,6 +1539,8 @@ function renderPromptList(){
     if(p.thumbnailUrl){
       const thumb = document.createElement('img');
       thumb.src = p.thumbnailUrl;
+      thumb.loading = 'lazy';
+      thumb.decoding = 'async';
       thumb.className = 'prompt-block-thumb';
       block.appendChild(thumb);
     }else{
