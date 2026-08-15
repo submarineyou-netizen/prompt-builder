@@ -80,7 +80,7 @@
   .btn.status-good{background:var(--green-dim);color:var(--green);border-color:var(--green);}
   .btn.status-needswork{background:var(--amber-dim);color:var(--amber);border-color:var(--amber);}
   .card-text-label{font-size:10.5px;color:var(--text-3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em;margin:8px 0 3px;}
-  .prompt-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(120px, 1fr));gap:10px;margin-bottom:12px;}
+  .prompt-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(90px, 1fr));gap:8px;margin-bottom:12px;}
   .prompt-block{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column;}
   .prompt-block:hover{border-color:var(--teal);}
   .prompt-block-thumb{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--panel-2);}
@@ -189,7 +189,7 @@
       </div>
     </div>
 
-    <div class="toprow">
+    <div class="toprow" id="listToprow">
       <input type="text" id="promptSearch" placeholder="名前・本文・メモで検索…" style="max-width:280px;">
       <button class="btn primary" id="newPromptBtn" style="margin-left:auto;">+ 新しいプロンプト</button>
       <button class="btn small" id="exportBtn">バックアップ書き出し</button>
@@ -253,31 +253,36 @@
           </div>
           <div class="cat-row" id="builderCatRow" style="display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px;margin-bottom:8px;"></div>
           <div style="margin-bottom:8px;">
-            <button class="btn small" id="builderImportToggle">一括インポート</button>
+            <button class="btn small" id="builderAddSectionToggle">＋ 新しいフレーズを登録</button>
           </div>
-          <div class="panel" id="builderImportPanel" style="margin-bottom:8px;">
-            <p style="font-size:12px;color:var(--text-2);margin:0 0 8px;">
-              1行1フレーズ。「カテゴリ | 日本語 | 英語タグ」の形式（Markdown表もそのまま貼り付け可）。既存カテゴリ名と一致すればそこに追加、なければ新規作成。同じ日本語のフレーズが既にあれば重複登録しません。
-            </p>
-            <textarea id="builderImportText" style="min-height:110px;" placeholder="衣装 | テニスウェア | tennis outfit
+          <div class="panel" id="builderAddSection" style="margin-bottom:8px;">
+            <div style="margin-bottom:8px;">
+              <button class="btn small" id="builderImportToggle">一括インポート</button>
+            </div>
+            <div class="panel" id="builderImportPanel" style="margin-bottom:8px;">
+              <p style="font-size:12px;color:var(--text-2);margin:0 0 8px;">
+                1行1フレーズ。「カテゴリ | 日本語 | 英語タグ」の形式（Markdown表もそのまま貼り付け可）。既存カテゴリ名と一致すればそこに追加、なければ新規作成。同じ日本語のフレーズが既にあれば重複登録しません。
+              </p>
+              <textarea id="builderImportText" style="min-height:110px;" placeholder="衣装 | テニスウェア | tennis outfit
 人物描写 | ベリーショートで眼鏡をかけた細身の男性 | very short hair, glasses, slim build"></textarea>
-            <div class="form-actions">
-              <button class="btn small" id="builderImportCancel">キャンセル</button>
-              <button class="btn small primary" id="builderImportRun">貼り付けをインポート</button>
+              <div class="form-actions">
+                <button class="btn small" id="builderImportCancel">キャンセル</button>
+                <button class="btn small primary" id="builderImportRun">貼り付けをインポート</button>
+              </div>
+              <div style="border-top:1px solid var(--border);margin:12px 0 8px;padding-top:8px;">
+                <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:6px;font-family:var(--mono);text-transform:uppercase;">またはファイルから読み込む（CSV / TSV / Excel）</label>
+                <input type="file" id="builderImportFile" accept=".csv,.tsv,.txt,.xlsx,.xls">
+              </div>
+              <p id="builderImportResult" style="font-size:12px;color:var(--teal);margin:8px 0 0;"></p>
             </div>
-            <div style="border-top:1px solid var(--border);margin:12px 0 8px;padding-top:8px;">
-              <label style="display:block;font-size:11px;color:var(--text-3);margin-bottom:6px;font-family:var(--mono);text-transform:uppercase;">またはファイルから読み込む（CSV / TSV / Excel）</label>
-              <input type="file" id="builderImportFile" accept=".csv,.tsv,.txt,.xlsx,.xls">
+            <div style="margin-bottom:6px;">
+              <input type="text" id="builderNewPhraseSub" list="subCategoryOptions" placeholder="サブカテゴリ（任意・例：立ち／座り／寝る）">
             </div>
-            <p id="builderImportResult" style="font-size:12px;color:var(--teal);margin:8px 0 0;"></p>
-          </div>
-          <div style="margin-bottom:6px;">
-            <input type="text" id="builderNewPhraseSub" list="subCategoryOptions" placeholder="サブカテゴリ（任意・例：立ち／座り／寝る）">
-          </div>
-          <div class="quick-add-grid" style="gap:8px;margin-bottom:8px;">
-            <input type="text" id="builderNewPhraseJa" placeholder="日本語">
-            <input type="text" id="builderNewPhraseEn" placeholder="英語タグ">
-            <button class="btn small" id="builderAddPhrase">追加</button>
+            <div class="quick-add-grid" style="gap:8px;">
+              <input type="text" id="builderNewPhraseJa" placeholder="日本語">
+              <input type="text" id="builderNewPhraseEn" placeholder="英語タグ">
+              <button class="btn small" id="builderAddPhrase">追加</button>
+            </div>
           </div>
           <div id="builderSelSummary" style="font-size:12px;color:var(--text-2);margin-bottom:8px;"></div>
           <div class="item-list" id="builderPhraseList" style="background:var(--panel-2);border:1px solid var(--border);border-radius:8px;max-height:360px;overflow-y:auto;margin-bottom:8px;"></div>
@@ -600,6 +605,8 @@ function renderBuilderCatRow(){
       builderSelectedCatId = cat.id;
       renderBuilderCatRow();
       renderBuilderPhraseList();
+      const listEl = document.getElementById('builderPhraseList');
+      if(listEl) listEl.scrollTop = 0;
     });
     chip.appendChild(nameSpan);
 
@@ -833,10 +840,31 @@ function renderBuilderPhraseList(){
     .map(ph=>({ph, applied: appliedTexts.has(ph.japanese)}))
     .filter(x=>x.ph.favorite)
     .sort((a,b)=> (b.applied - a.applied));
-  favPhrases.forEach(({ph, applied})=>{
-    if(editingPhraseId===ph.id){ area.appendChild(renderPhraseEditRow(cat, ph)); return; }
-    area.appendChild(buildPhraseRow(ph, applied));
-  });
+  if(favPhrases.length>0){
+    const favOpen = expandedSubs.has('__fav__');
+    const favHeader = document.createElement('div');
+    favHeader.className = 'sub-header';
+    favHeader.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 10px;font-size:11px;font-weight:600;color:#c9971f;background:#c9971f14;cursor:pointer;';
+    const favArrow = document.createElement('span');
+    favArrow.textContent = favOpen ? '▼' : '▶';
+    favArrow.style.cssText = 'font-size:9px;';
+    favHeader.appendChild(favArrow);
+    const favLabel = document.createElement('span');
+    favLabel.textContent = `★ お気に入り (${favPhrases.length})`;
+    favHeader.appendChild(favLabel);
+    favHeader.addEventListener('click', ()=>{
+      if(expandedSubs.has('__fav__')) expandedSubs.delete('__fav__');
+      else expandedSubs.add('__fav__');
+      renderBuilderPhraseList();
+    });
+    area.appendChild(favHeader);
+    if(favOpen){
+      favPhrases.forEach(({ph, applied})=>{
+        if(editingPhraseId===ph.id){ area.appendChild(renderPhraseEditRow(cat, ph)); return; }
+        area.appendChild(buildPhraseRow(ph, applied));
+      });
+    }
+  }
 
   if(!cat.subOrder) cat.subOrder = [];
   cat.phrases.forEach(ph=>{
@@ -983,6 +1011,9 @@ document.getElementById('builderAddPhrase').addEventListener('click', async ()=>
 });
 
 /* ---------- builder bulk import ---------- */
+document.getElementById('builderAddSectionToggle').addEventListener('click', ()=>{
+  document.getElementById('builderAddSection').classList.toggle('open');
+});
 document.getElementById('builderImportToggle').addEventListener('click', ()=>{
   document.getElementById('builderImportPanel').classList.toggle('open');
 });
@@ -1351,6 +1382,19 @@ document.getElementById('np-thumb-remove').addEventListener('click', ()=>{
   document.getElementById('np-thumb-remove').style.display = 'none';
 });
 
+function showEditScreen(){
+  document.getElementById('newPromptForm').classList.add('open');
+  document.getElementById('promptList').style.display = 'none';
+  document.getElementById('listToprow').style.display = 'none';
+  document.getElementById('backupResult').style.display = 'none';
+}
+function showListScreen(){
+  document.getElementById('newPromptForm').classList.remove('open');
+  document.getElementById('promptList').style.display = '';
+  document.getElementById('listToprow').style.display = '';
+  document.getElementById('backupResult').style.display = '';
+}
+
 document.getElementById('newPromptBtn').addEventListener('click', ()=>{
   editingPromptId = null;
   document.getElementById('np-name').value='';
@@ -1360,13 +1404,13 @@ document.getElementById('newPromptBtn').addEventListener('click', ()=>{
   document.getElementById('np-pos-sentence').value='';
   document.getElementById('np-meta-row').style.display='none';
   resetThumbField();
-  document.getElementById('newPromptForm').classList.add('open');
+  showEditScreen();
   renderAllTagChips();
   renderNpPreview();
   document.getElementById('np-name').focus();
 });
 function cancelPromptForm(){
-  document.getElementById('newPromptForm').classList.remove('open');
+  showListScreen();
   editingPromptId = null;
 }
 function compressImage(file, maxDim, quality){
@@ -1410,7 +1454,7 @@ async function savePromptForm(){
     const statusEl = document.getElementById('np-thumb-status');
     statusEl.textContent = '画像を圧縮しています…';
     try{
-      const compressed = await compressImage(selectedThumbFile, 640, 0.75);
+      const compressed = await compressImage(selectedThumbFile, 360, 0.6);
       statusEl.textContent = '画像をアップロード中…';
       const path = `users/${currentUser.uid}/thumbnails/${savedId}.jpg`;
       const storageRef = window.fb.ref(window.fb.storageFb, path);
@@ -1433,7 +1477,7 @@ async function savePromptForm(){
     prompts.unshift(np);
   }
   await savePrompts();
-  document.getElementById('newPromptForm').classList.remove('open');
+  showListScreen();
   editingPromptId = null;
   renderPromptList();
 }
@@ -1593,12 +1637,12 @@ function openEditForm(p){
     if(!confirm(`「${p.name}」を削除しますか？`)) return;
     prompts = prompts.filter(x=>x.id!==p.id);
     await savePrompts();
-    document.getElementById('newPromptForm').classList.remove('open');
+    showListScreen();
     editingPromptId = null;
     renderPromptList();
   };
 
-  document.getElementById('newPromptForm').classList.add('open');
+  showEditScreen();
   renderAllTagChips();
   renderNpPreview();
   document.getElementById('newPromptForm').scrollIntoView({behavior:'smooth', block:'start'});
