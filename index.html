@@ -50,8 +50,10 @@
   #stickyHeader{background:var(--bg);padding-top:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
   .field.pinned{position:sticky;top:8px;z-index:40;background:var(--bg);padding-top:8px;padding-bottom:8px;box-shadow:0 4px 14px rgba(20,25,30,0.1);}
   #builderPanel.open{position:fixed;inset:0;z-index:1000;background:rgba(20,25,30,0.45);overflow-y:auto;display:flex;justify-content:center;align-items:flex-start;padding:5vh 16px;border:none;border-radius:0;max-width:none;margin:0;}
-  #builderPanelInner{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);max-width:560px;width:100%;padding:18px;max-height:90vh;overflow-y:auto;}
-  #builderSelectedPanel{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);width:170px;flex-shrink:0;padding:12px 10px;max-height:90vh;overflow-y:auto;}
+  #builderPanelInner{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);max-width:480px;width:100%;padding:18px;max-height:90vh;overflow-y:auto;}
+  #builderSelectedPanel{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);width:150px;flex-shrink:0;padding:12px 10px;max-height:90vh;overflow-y:auto;}
+  #builderCatListPanel{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);width:150px;flex-shrink:0;padding:12px 0;max-height:90vh;overflow-y:auto;}
+  #builderCatListPanel > div:first-child{padding:0 10px;}
   .selected-tag-item{padding:6px 8px;margin-bottom:5px;background:var(--panel-2);border-radius:6px;font-size:12px;cursor:pointer;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;}
   .selected-tag-item:hover{background:var(--teal-dim);color:var(--teal);}
   .settings-line{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--text-3);font-family:var(--mono);padding:4px 0;flex-wrap:wrap;}
@@ -100,6 +102,10 @@
   }
   .chip.active{background:var(--teal-dim);border-color:var(--teal);color:var(--teal);font-weight:600;}
   .chip.add{border-style:dashed;color:var(--text-3);}
+  .cat-list-item{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px;cursor:pointer;color:var(--text-2);}
+  .cat-list-item:hover{background:var(--panel-2);}
+  .cat-list-item.active{background:var(--teal-dim);color:var(--teal);font-weight:600;}
+  .cat-list-item.add{color:var(--text-3);border-style:dashed;border-bottom-style:dashed;}
   .tag-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 6px 3px 10px;border-radius:12px;background:var(--teal-dim);color:var(--teal);font-size:12px;}
   .tag-chip button{background:none;border:none;color:inherit;cursor:pointer;font-size:12px;padding:0;line-height:1;opacity:.7;}
   .tag-chip button:hover{opacity:1;}
@@ -148,6 +154,7 @@
     #builderPopupRow{height:100%;}
     #builderPanelInner{max-height:none;height:100%;border-radius:0;}
     #builderSelectedPanel{max-height:96px;border-radius:0;}
+    #builderCatListPanel{width:100%;max-height:96px;border-radius:0;}
   }
 </style>
 </head>
@@ -245,13 +252,16 @@
         <div class="panel" id="builderPanel">
         <div id="builderPopupRow" style="display:flex;gap:12px;align-items:stretch;">
         <div id="builderSelectedPanel"></div>
+        <div id="builderCatListPanel">
+          <div style="font-weight:600;font-size:12px;margin-bottom:8px;">カテゴリ</div>
+          <div id="builderCatRow"></div>
+        </div>
         <div id="builderPanelInner">
           <datalist id="subCategoryOptions"></datalist>
           <div style="display:flex;align-items:center;margin-bottom:12px;">
             <span style="font-weight:600;font-size:15px;">タグを選ぶ</span>
             <button class="btn small" id="builderClose" style="margin-left:auto;">✕ 閉じて戻る</button>
           </div>
-          <div class="cat-row" id="builderCatRow" style="display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px;margin-bottom:8px;"></div>
           <div style="margin-bottom:8px;">
             <button class="btn small" id="builderAddSectionToggle">＋ 新しいフレーズを登録</button>
           </div>
@@ -584,37 +594,27 @@ function renderBuilderCatRow(){
   const row = document.getElementById('builderCatRow');
   row.innerHTML='';
   let dragFromIdx = null;
+  const jaTagsStr = document.getElementById('np-ja-tags').value.trim();
+  const appliedTexts = new Set(jaTagsStr.split(/、\s*/).map(s=>s.trim()).filter(Boolean));
+
   builderCats.forEach((cat, idx)=>{
     const chip = document.createElement('div');
-    chip.className='chip' + (cat.id===builderSelectedCatId ? ' active' : '');
+    chip.className='cat-list-item' + (cat.id===builderSelectedCatId ? ' active' : '');
     chip.draggable = true;
-    chip.style.cursor = 'default';
-    chip.title = 'ドラッグで並べ替え';
+    chip.style.borderLeft = `4px solid ${categoryColorFor(cat.id)}`;
+    chip.title = 'クリックで選択／ドラッグで並べ替え';
 
-    const dot = document.createElement('span');
-    dot.style.cssText = `display:inline-block;width:9px;height:9px;border-radius:50%;background:${categoryColorFor(cat.id)};flex-shrink:0;`;
-    chip.appendChild(dot);
-
-    const jaTagsStr = document.getElementById('np-ja-tags').value.trim();
-    const appliedTexts = new Set(jaTagsStr.split(/、\s*/).map(s=>s.trim()).filter(Boolean));
     const n = cat.phrases.filter(p=>appliedTexts.has(p.japanese)).length;
     const nameSpan = document.createElement('span');
     nameSpan.textContent = cat.name + (n>0 ? ` (${n})` : '');
-    nameSpan.style.cursor = 'pointer';
-    nameSpan.addEventListener('click', ()=>{
-      builderSelectedCatId = cat.id;
-      renderBuilderCatRow();
-      renderBuilderPhraseList();
-      const listEl = document.getElementById('builderPhraseList');
-      if(listEl) listEl.scrollTop = 0;
-    });
+    nameSpan.style.flex = '1';
     chip.appendChild(nameSpan);
 
     const delBtn = document.createElement('button');
     delBtn.className='mini';
     delBtn.textContent='×';
     delBtn.title='このカテゴリを削除';
-    delBtn.style.cssText='background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:12px;opacity:.6;';
+    delBtn.style.cssText='background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:12px;opacity:.6;flex-shrink:0;';
     delBtn.addEventListener('click', async (ev)=>{
       ev.stopPropagation();
       const count = cat.phrases.length;
@@ -626,13 +626,20 @@ function renderBuilderCatRow(){
     });
     chip.appendChild(delBtn);
 
+    chip.addEventListener('click', ()=>{
+      builderSelectedCatId = cat.id;
+      renderBuilderCatRow();
+      renderBuilderPhraseList();
+      const listEl = document.getElementById('builderPhraseList');
+      if(listEl) listEl.scrollTop = 0;
+    });
+
     chip.addEventListener('dragstart', (ev)=>{
       dragFromIdx = idx;
       chip.style.opacity = '.4';
-      chip.style.cursor = 'grabbing';
       ev.dataTransfer.effectAllowed = 'move';
     });
-    chip.addEventListener('dragend', ()=>{ chip.style.opacity = '1'; chip.style.cursor = 'default'; });
+    chip.addEventListener('dragend', ()=>{ chip.style.opacity = '1'; });
     chip.addEventListener('dragover', (ev)=>{ ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; });
     chip.addEventListener('drop', async (ev)=>{
       ev.preventDefault();
@@ -646,7 +653,7 @@ function renderBuilderCatRow(){
     row.appendChild(chip);
   });
   const add = document.createElement('div');
-  add.className='chip add';
+  add.className='cat-list-item add';
   add.textContent='+ カテゴリ追加';
   add.addEventListener('click', async ()=>{
     const name = prompt('カテゴリ名');
@@ -779,20 +786,11 @@ function renderBuilderPhraseList(){
     row.appendChild(editBtn);
     const span = document.createElement('span');
     span.textContent = ph.english ? `${ph.japanese} — ${ph.english}` : ph.japanese;
-    span.style.cursor = 'pointer';
-    span.addEventListener('click', (ev)=>{
-      ev.stopPropagation();
-      togglePhraseApplied(ph, applied);
-    });
     row.appendChild(span);
     if(applied){
       const badge = document.createElement('span');
       badge.textContent = '追加中';
-      badge.style.cssText = `font-size:10px;font-family:var(--mono);color:${catColor};border:1px solid ${catColor};border-radius:4px;padding:1px 5px;flex-shrink:0;cursor:pointer;`;
-      badge.addEventListener('click', (ev)=>{
-        ev.stopPropagation();
-        togglePhraseApplied(ph, applied);
-      });
+      badge.style.cssText = `font-size:10px;font-family:var(--mono);color:${catColor};border:1px solid ${catColor};border-radius:4px;padding:1px 5px;flex-shrink:0;`;
       row.appendChild(badge);
     }
     const del = document.createElement('button');
@@ -831,6 +829,9 @@ function renderBuilderPhraseList(){
       draggedPhraseId = null;
       await saveBuilderCats();
       renderBuilderPhraseList(); renderBuilderCatRow();
+    });
+    row.addEventListener('click', ()=>{
+      togglePhraseApplied(ph, applied);
     });
 
     return row;
@@ -882,37 +883,33 @@ function renderBuilderPhraseList(){
     const sortedPhrases = cat.phrases
       .map(ph=>({ph, applied: appliedTexts.has(ph.japanese)}))
       .filter(x=> (x.ph.sub||'')===subLabel)
-      .sort((a,b)=> (b.applied - a.applied));
+      .sort((a,b)=> (b.applied - a.applied) || ((b.ph.favorite?1:0) - (a.ph.favorite?1:0)));
 
-    if(!subLabel && sortedPhrases.length>0){
-      const divider = document.createElement('div');
-      divider.style.cssText = `padding:6px 10px;font-size:10.5px;font-weight:600;color:var(--text-3);background:var(--panel);border-top:3px solid var(--border-strong);letter-spacing:.03em;`;
-      divider.textContent = `未分類 (${sortedPhrases.length})`;
-      area.appendChild(divider);
-    }
+    if(sortedPhrases.length===0) return;
 
+    const key = subLabel || '__unclassified__';
+    const isOpen = expandedSubs.has(key);
+    const header = document.createElement('div');
+    header.className = 'sub-header';
+    header.style.cssText = `display:flex;align-items:center;gap:6px;padding:6px 10px;font-size:11px;font-weight:600;color:${catColor};background:${catColor}14;border-top:1px solid var(--border);cursor:${subLabel ? 'grab' : 'pointer'};`;
+    header.draggable = !!subLabel;
+    header.title = subLabel ? 'クリックで開閉／ドラッグで順番変更' : 'クリックで開閉';
+
+    const arrow = document.createElement('span');
+    arrow.textContent = isOpen ? '▼' : '▶';
+    arrow.style.cssText = 'font-size:9px;';
+    header.appendChild(arrow);
+
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = `${subLabel || '未分類'} (${sortedPhrases.length})`;
+    header.appendChild(labelSpan);
+
+    header.addEventListener('click', ()=>{
+      if(expandedSubs.has(key)) expandedSubs.delete(key);
+      else expandedSubs.add(key);
+      renderBuilderPhraseList();
+    });
     if(subLabel){
-      const isOpen = expandedSubs.has(subLabel);
-      const header = document.createElement('div');
-      header.className = 'sub-header';
-      header.style.cssText = `display:flex;align-items:center;gap:6px;padding:6px 10px;font-size:11px;font-weight:600;color:${catColor};background:${catColor}14;border-top:1px solid var(--border);cursor:grab;`;
-      header.draggable = true;
-      header.title = 'クリックで開閉／ドラッグで順番変更';
-
-      const arrow = document.createElement('span');
-      arrow.textContent = isOpen ? '▼' : '▶';
-      arrow.style.cssText = 'font-size:9px;';
-      header.appendChild(arrow);
-
-      const labelSpan = document.createElement('span');
-      labelSpan.textContent = `${subLabel} (${sortedPhrases.length})`;
-      header.appendChild(labelSpan);
-
-      header.addEventListener('click', ()=>{
-        if(expandedSubs.has(subLabel)) expandedSubs.delete(subLabel);
-        else expandedSubs.add(subLabel);
-        renderBuilderPhraseList();
-      });
       header.addEventListener('dragstart', (ev)=>{
         draggedSubLabel = subLabel;
         draggedPhraseId = null;
@@ -945,9 +942,9 @@ function renderBuilderPhraseList(){
           }
         }
       });
-      area.appendChild(header);
-      if(!isOpen) return;
     }
+    area.appendChild(header);
+    if(!isOpen) return;
 
     sortedPhrases.forEach(({ph, applied})=>{
       if(editingPhraseId===ph.id){ area.appendChild(renderPhraseEditRow(cat, ph)); return; }
@@ -1324,7 +1321,9 @@ function renderSelectedTagsPanel(){
   items.forEach((item, idx)=>{
     const el = document.createElement('div');
     el.className = 'selected-tag-item';
-    el.textContent = item;
+    el.style.display = 'flex';
+    el.style.alignItems = 'flex-start';
+    el.style.gap = '4px';
     el.title = 'タップで解除';
     const srcCat = findCategoryByJapanese(item);
     if(srcCat){
@@ -1333,6 +1332,31 @@ function renderSelectedTagsPanel(){
       el.style.background = color + '1a';
       el.title = `${srcCat.name} — タップで解除`;
     }
+
+    const textSpan = document.createElement('span');
+    textSpan.textContent = item;
+    textSpan.style.cssText = 'flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;';
+    el.appendChild(textSpan);
+
+    if(srcCat){
+      const editBtn = document.createElement('button');
+      editBtn.textContent = '✎';
+      editBtn.title = 'このフレーズを編集';
+      editBtn.style.cssText = 'background:none;border:none;color:inherit;cursor:pointer;font-size:11px;padding:0;flex-shrink:0;opacity:.7;';
+      editBtn.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        const ph = srcCat.phrases.find(p=>p.japanese===item);
+        if(!ph) return;
+        builderSelectedCatId = srcCat.id;
+        editingPhraseId = ph.id;
+        if(ph.favorite) expandedSubs.add('__fav__');
+        expandedSubs.add(ph.sub || '__unclassified__');
+        renderBuilderCatRow();
+        renderBuilderPhraseList();
+      });
+      el.appendChild(editBtn);
+    }
+
     el.addEventListener('click', async ()=>{
       const current = jaTa.value.split(/、\s*/).map(s=>s.trim()).filter(Boolean);
       current.splice(idx, 1);
