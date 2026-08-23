@@ -50,9 +50,9 @@
   #stickyHeader{background:var(--bg);padding-top:10px;padding-bottom:8px;border-bottom:1px solid var(--border);}
   .field.pinned{position:sticky;top:8px;z-index:40;background:var(--bg);padding-top:8px;padding-bottom:8px;box-shadow:0 4px 14px rgba(20,25,30,0.1);}
   #builderPanel.open{position:fixed;inset:0;z-index:1000;background:rgba(20,25,30,0.45);overflow-y:auto;display:flex;justify-content:center;align-items:flex-start;padding:5vh 16px;border:none;border-radius:0;max-width:none;margin:0;}
-  #builderPanelInner{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);max-width:560px;width:100%;padding:18px;max-height:90vh;overflow-y:auto;}
+  #builderPanelInner{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);width:560px;flex-shrink:0;padding:18px;max-height:90vh;overflow-y:auto;}
   #builderSelectedPanel{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);width:150px;flex-shrink:0;padding:12px 10px;max-height:90vh;overflow-y:auto;}
-  #builderCatListPanel{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);width:300px;flex-shrink:0;padding:12px 0;max-height:90vh;overflow-y:auto;}
+  #builderCatListPanel{background:var(--panel);border-radius:12px;box-shadow:0 12px 40px rgba(20,25,30,0.25);width:200px;flex-shrink:0;padding:12px 0;max-height:90vh;overflow-y:auto;}
   #builderCatListPanel > div:first-child{padding:0 10px;}
   .selected-tag-item{padding:6px 8px;margin-bottom:5px;background:var(--panel-2);border-radius:6px;font-size:12px;cursor:pointer;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4;}
   .selected-tag-item:hover{background:var(--teal-dim);color:var(--teal);}
@@ -601,7 +601,9 @@ function renderBuilderCatRow(){
     const chip = document.createElement('div');
     chip.className='cat-list-item' + (cat.id===builderSelectedCatId ? ' active' : '');
     chip.draggable = true;
-    chip.style.borderLeft = `4px solid ${categoryColorFor(cat.id)}`;
+    const cColor = categoryColorFor(cat.id);
+    chip.style.borderLeft = `4px solid ${cColor}`;
+    if(cat.id!==builderSelectedCatId) chip.style.background = cColor + '14';
     chip.title = 'クリックで選択／ドラッグで並べ替え';
 
     const n = cat.phrases.filter(p=>appliedTexts.has(p.japanese)).length;
@@ -744,46 +746,50 @@ function renderBuilderPhraseList(){
     row.className='phrase-row' + (applied ? ' selected' : '');
     row.style.cursor = 'pointer';
     row.style.borderLeft = `4px solid ${catColor}`;
-    if(applied) row.style.background = catColor + '1a';
+    row.style.background = applied ? (catColor + '33') : (catColor + '14');
     row.title = (applied ? 'タップで解除・' : 'タップで追加・') + 'ドラッグで移動';
     row.draggable = true;
+
+    const iconGroup = document.createElement('span');
+    iconGroup.style.cssText = 'display:flex;align-items:center;gap:4px;';
+    iconGroup.addEventListener('click', (ev)=>{ ev.stopPropagation(); });
 
     const cb = document.createElement('input');
     cb.type='checkbox';
     cb.checked = delSel.includes(ph.id);
     cb.title = '削除選択用';
-    cb.addEventListener('click', (ev)=>{ ev.stopPropagation(); });
     cb.addEventListener('change', ()=>{
       const cur = builderDeleteSelection[cat.id] || [];
       if(cb.checked) builderDeleteSelection[cat.id] = [...cur, ph.id];
       else builderDeleteSelection[cat.id] = cur.filter(id=>id!==ph.id);
       renderBuilderPhraseList();
     });
-    row.appendChild(cb);
+    iconGroup.appendChild(cb);
 
     const starBtn = document.createElement('button');
     starBtn.className='icon-btn';
     starBtn.textContent = ph.favorite ? '★' : '☆';
     starBtn.title = ph.favorite ? 'お気に入り解除' : 'お気に入りに追加';
     starBtn.style.color = ph.favorite ? '#c9971f' : '';
-    starBtn.addEventListener('click', async (ev)=>{
-      ev.stopPropagation();
+    starBtn.addEventListener('click', async ()=>{
       ph.favorite = !ph.favorite;
       await saveBuilderCats();
       renderBuilderPhraseList();
     });
-    row.appendChild(starBtn);
+    iconGroup.appendChild(starBtn);
 
     const editBtn = document.createElement('button');
     editBtn.className='icon-btn';
     editBtn.textContent='✎';
     editBtn.title='編集';
-    editBtn.addEventListener('click', (ev)=>{
-      ev.stopPropagation();
+    editBtn.addEventListener('click', ()=>{
       editingPhraseId = ph.id;
       renderBuilderPhraseList();
     });
-    row.appendChild(editBtn);
+    iconGroup.appendChild(editBtn);
+
+    row.appendChild(iconGroup);
+
     const span = document.createElement('span');
     span.textContent = ph.english ? `${ph.japanese} — ${ph.english}` : ph.japanese;
     row.appendChild(span);
