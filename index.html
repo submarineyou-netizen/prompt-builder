@@ -1639,26 +1639,25 @@ function renderPromptList(){
     const items = list.filter(p=>(p.category||'')===cat);
     if(items.length===0) return;
 
-    if(cat){
-      const header = document.createElement('div');
-      header.className = 'sub-header';
-      header.style.cssText = 'padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;';
-      const isOpen = expandedPromptCats.has(cat);
-      const arrow = document.createElement('span');
-      arrow.textContent = isOpen ? '▼' : '▶';
-      arrow.style.fontSize = '10px';
-      header.appendChild(arrow);
-      const label = document.createElement('span');
-      label.textContent = `${cat} (${items.length})`;
-      header.appendChild(label);
-      header.addEventListener('click', ()=>{
-        if(expandedPromptCats.has(cat)) expandedPromptCats.delete(cat);
-        else expandedPromptCats.add(cat);
-        renderPromptList();
-      });
-      area.appendChild(header);
-      if(!isOpen) return;
-    }
+    const key = cat || '__unclassified__';
+    const header = document.createElement('div');
+    header.className = 'sub-header';
+    header.style.cssText = 'padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;';
+    const isOpen = expandedPromptCats.has(key);
+    const arrow = document.createElement('span');
+    arrow.textContent = isOpen ? '▼' : '▶';
+    arrow.style.fontSize = '10px';
+    header.appendChild(arrow);
+    const label = document.createElement('span');
+    label.textContent = `${cat || '未分類'} (${items.length})`;
+    header.appendChild(label);
+    header.addEventListener('click', ()=>{
+      if(expandedPromptCats.has(key)) expandedPromptCats.delete(key);
+      else expandedPromptCats.add(key);
+      renderPromptList();
+    });
+    area.appendChild(header);
+    if(!isOpen) return;
 
     const grid = document.createElement('div');
     grid.className = 'prompt-grid';
