@@ -639,6 +639,8 @@ function renderBuilderCatRow(){
 
     chip.addEventListener('click', ()=>{
       builderSelectedCatId = cat.id;
+      expandedSubs = new Set();
+      lastOpenedSub = '';
       renderBuilderCatRow();
       renderBuilderPhraseList();
       const listEl = document.getElementById('builderPhraseList');
