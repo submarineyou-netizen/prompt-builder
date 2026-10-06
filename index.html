@@ -84,6 +84,18 @@
   .btn.status-good{background:var(--green-dim);color:var(--green);border-color:var(--green);}
   .btn.status-needswork{background:var(--amber-dim);color:var(--amber);border-color:var(--amber);}
   .card-text-label{font-size:10.5px;color:var(--text-3);font-family:var(--mono);text-transform:uppercase;letter-spacing:.05em;margin:8px 0 3px;}
+  .org-selbar{position:sticky;top:0;z-index:30;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;margin-bottom:8px;background:var(--teal-dim);border:1px solid var(--teal);border-radius:8px;}
+  .org-btn.org-btn-on{color:var(--teal);font-weight:600;}
+  .org-cb{flex-shrink:0;}
+  .parts-panel{border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;background:var(--panel-2);}
+  .parts-title{font-size:11px;color:var(--text-3);margin-bottom:6px;}
+  .parts-block{margin-bottom:8px;}
+  .parts-block:last-child{margin-bottom:0;}
+  .parts-tagname{font-size:12px;font-weight:600;margin-bottom:4px;}
+  .parts-chips{display:flex;flex-wrap:wrap;gap:6px;}
+  .part-chip{border:1px solid var(--border-strong);background:var(--panel);color:var(--text);border-radius:14px;padding:3px 10px;font-size:12px;cursor:pointer;text-align:left;font-family:var(--sans);}
+  .part-chip.on{background:var(--teal-dim);border-color:var(--teal);color:var(--teal);}
+  .part-chip.off{opacity:.55;text-decoration:line-through;}
   .org-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
   .org-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center;}
   .org-hint{font-size:11.5px;color:var(--text-3);margin:0 0 10px;line-height:1.5;}
@@ -164,6 +176,8 @@
     .form-actions{flex-wrap:wrap;}
     .form-actions .btn{flex:1;}
     .cat-row .chip{font-size:13px;padding:6px 10px;}
+    .org-row{flex-wrap:wrap;}
+    .org-selbar select{max-width:100% !important;}
     .np-name-row{flex-direction:column;align-items:stretch !important;}
     .np-name-row > div{flex:none !important;width:100%;}
     .icon-btn{font-size:16px;padding:4px 6px;}
@@ -335,6 +349,7 @@
         </div>
         </div>
         <div id="np-ja-tags-chips" class="cat-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;"></div>
+        <div id="np-parts-panel"></div>
         <textarea id="np-ja-tags" style="min-height:50px;" placeholder="選んだ日本語タグがここに並びます（直接編集も可）"></textarea>
       </div>
       <div class="field" style="margin-bottom:8px;">
@@ -367,6 +382,7 @@
           <button class="btn small" id="orgTabPrompts">プロンプト</button>
         </div>
       </div>
+      <div id="orgSelBar" class="org-selbar" style="display:none;"></div>
       <div id="orgTagsView"></div>
       <div id="orgPromptsView" style="display:none;"></div>
     </div>
@@ -604,6 +620,7 @@ function normalizeBuilderCats(){
         cat.phrases.forEach(ph=>{ if((ph.sub||'')===l) ph.groupId = g.id; });
       });
     }
+    if(typeof cat.partToggle!=='boolean'){ cat.partToggle = (cat.name==='衣装'); changed = true; }
     cat.phrases.forEach(ph=>{ if('sub' in ph){ delete ph.sub; changed = true; } });
     if('subOrder' in cat){ delete cat.subOrder; changed = true; }
     (function fix(arr){
@@ -737,6 +754,11 @@ function renderBuilderCatRow(){
 let builderDeleteSelection = {}; // catId -> [phraseId, ...]
 let expandedSubs = new Set();    // サブカテゴリid / '__fav__' / '__unclassified__'
 let lastOpenedSub = '';          // 直近で開いたサブカテゴリのid
+
+function autoGrowTextarea(ta){
+  ta.style.height = 'auto';
+  if(ta.scrollHeight>0) ta.style.height = ta.scrollHeight + 'px';
+}
 
 function escHtml(s){
   return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -911,7 +933,8 @@ function renderBuilderPhraseList(){
     row.appendChild(iconGroup);
 
     const span = document.createElement('span');
-    span.textContent = ph.english ? `${ph.japanese} — ${ph.english}` : ph.japanese;
+    span.textContent = ph.japanese;
+    if(ph.english) span.title = ph.english;
     row.appendChild(span);
     if(applied){
       const badge = document.createElement('span');
@@ -1069,8 +1092,8 @@ function renderBuilderPhraseList(){
       area.appendChild(header);
       if(!isOpen) return;
 
-      appendPhraseRows(sortPhrases(cat.phrases.filter(p=>p.groupId===node.id)), depth+1);
       renderGroups(node.children||[], depth+1);
+      appendPhraseRows(sortPhrases(cat.phrases.filter(p=>p.groupId===node.id)), depth+1);
     });
   }
   renderGroups(catGroups(cat), 0);
@@ -1115,14 +1138,16 @@ function renderBuilderPhraseList(){
 
 function renderPhraseEditRow(cat, ph){
   const row = document.createElement('div');
+  row.dataset.editing = '1';
   row.style.cssText='display:flex;flex-direction:column;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border);';
   row.innerHTML = `
     <select class="pe-group">${groupSelectOptions(cat, ph.groupId, '未分類（サブカテゴリなし）')}</select>
-    <div class="phrase-edit-grid" style="gap:6px;">
-      <input type="text" class="pe-ja" value="${escHtml(ph.japanese)}">
-      <input type="text" class="pe-en" value="${escHtml(ph.english||'')}">
-    </div>
+    <input type="text" class="pe-ja" value="${escHtml(ph.japanese)}">
+    <textarea class="pe-en" rows="1" style="resize:none;overflow:hidden;">${escHtml(ph.english||'')}</textarea>
   `;
+  const ta = row.querySelector('.pe-en');
+  ta.addEventListener('input', ()=>autoGrowTextarea(ta));
+  setTimeout(()=>autoGrowTextarea(ta), 0);
   const actionsRow = document.createElement('div');
   actionsRow.style.cssText='display:flex;gap:6px;justify-content:flex-end;';
   const saveBtn = document.createElement('button');
@@ -1130,7 +1155,7 @@ function renderPhraseEditRow(cat, ph){
   saveBtn.textContent='保存';
   saveBtn.addEventListener('click', async ()=>{
     const ja = row.querySelector('.pe-ja').value.trim();
-    const en = row.querySelector('.pe-en').value.trim();
+    const en = ta.value.replace(/\s*\n\s*/g,' ').trim();
     const gid = row.querySelector('.pe-group').value;
     if(!ja) return;
     ph.japanese = ja; ph.english = en;
@@ -1371,27 +1396,92 @@ async function togglePhraseApplied(ph, isApplied){
 
 /* ================= PROMPTS ================= */
 
-function derivedEnglishTagsFromText(jaTagsStr){
+let npPartsOff = {};   // {タグの日本語名: [OFFにした英語パーツ]}
+
+function splitEnParts(en){ return String(en||'').split(',').map(s=>s.trim()).filter(Boolean); }
+
+function derivedEnglishTagsFromText(jaTagsStr, partsOff){
   if(!jaTagsStr) return [];
   const items = jaTagsStr.split(/、\s*/).map(s=>s.trim()).filter(Boolean);
   const enList = [];
   items.forEach(item=>{
     for(const cat of builderCats){
       const ph = cat.phrases.find(p=>p.japanese===item);
-      if(ph && ph.english){ enList.push(ph.english); return; }
+      if(ph && ph.english){
+        const off = partsOff && partsOff[item];
+        const en = (off && off.length)
+          ? splitEnParts(ph.english).filter(s=>!off.includes(s)).join(', ')
+          : ph.english;
+        if(en) enList.push(en);
+        return;
+      }
     }
   });
   return enList;
 }
 
+function renderPartsPanel(){
+  const wrap = document.getElementById('np-parts-panel');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  const jaTags = document.getElementById('np-ja-tags').value.trim();
+  const items = jaTags.split(/、\s*/).map(s=>s.trim()).filter(Boolean);
+  const blocks = [];
+  items.forEach(item=>{
+    const cat = findCategoryByJapanese(item);
+    if(!cat || !cat.partToggle) return;
+    const ph = cat.phrases.find(p=>p.japanese===item);
+    const parts = splitEnParts(ph && ph.english);
+    if(parts.length<2) return;
+    if(blocks.some(b=>b.item===item)) return;
+    blocks.push({item, parts});
+  });
+  if(blocks.length===0) return;
+  const panel = document.createElement('div');
+  panel.className = 'parts-panel';
+  const title = document.createElement('div');
+  title.className = 'parts-title';
+  title.textContent = 'パーツのON/OFF（クリックで切替。OFFのパーツは完成形から除かれます）';
+  panel.appendChild(title);
+  blocks.forEach(({item, parts})=>{
+    const block = document.createElement('div');
+    block.className = 'parts-block';
+    const nm = document.createElement('div');
+    nm.className = 'parts-tagname';
+    nm.textContent = item;
+    block.appendChild(nm);
+    const chips = document.createElement('div');
+    chips.className = 'parts-chips';
+    parts.forEach(part=>{
+      const off = (npPartsOff[item]||[]).includes(part);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'part-chip ' + (off ? 'off' : 'on');
+      b.textContent = part;
+      b.addEventListener('click', ()=>{
+        const arr = npPartsOff[item] || (npPartsOff[item] = []);
+        const i = arr.indexOf(part);
+        if(i>=0) arr.splice(i,1); else arr.push(part);
+        if(arr.length===0) delete npPartsOff[item];
+        renderNpPreview();
+      });
+      chips.appendChild(b);
+    });
+    block.appendChild(chips);
+    panel.appendChild(block);
+  });
+  wrap.appendChild(panel);
+}
+
 function assembledPositiveLive(){
   const jaTags = document.getElementById('np-ja-tags').value.trim();
-  const enTags = derivedEnglishTagsFromText(jaTags);
+  const enTags = derivedEnglishTagsFromText(jaTags, npPartsOff);
   const sentence = document.getElementById('np-pos-sentence').value.trim();
   return [data.settings.triggerWord, data.settings.qualityPrefix, enTags.join(', '), sentence].filter(Boolean).join(', ');
 }
 
 function renderNpPreview(){
+  renderPartsPanel();
   const wrap = document.getElementById('np-preview');
   wrap.innerHTML = '';
   const jaTags = document.getElementById('np-ja-tags').value.trim();
@@ -1544,11 +1634,15 @@ function renderSelectedTagsPanel(){
         if(!ph) return;
         builderSelectedCatId = srcCat.id;
         editingPhraseId = ph.id;
-        if(ph.favorite) expandedSubs.add('__fav__');
-        if(ph.groupId){ groupAncestorIds(srcCat, ph.groupId).forEach(id=>expandedSubs.add(id)); }
+        expandedSubs = new Set();
+        lastOpenedSub = '';
+        const validIds = new Set(flattenGroups(srcCat).map(x=>x.node.id));
+        if(ph.groupId && validIds.has(ph.groupId)){ groupAncestorIds(srcCat, ph.groupId).forEach(id=>expandedSubs.add(id)); }
         else { expandedSubs.add('__unclassified__'); }
         renderBuilderCatRow();
         renderBuilderPhraseList();
+        const editingRow = document.querySelector('#builderPhraseList [data-editing="1"]');
+        if(editingRow) editingRow.scrollIntoView({block:'center'});
       });
       el.appendChild(editBtn);
     }
@@ -1625,6 +1719,7 @@ document.getElementById('newPromptBtn').addEventListener('click', ()=>{
   document.getElementById('np-ja-sentence').value='';
   document.getElementById('np-pos-sentence').value='';
   document.getElementById('np-meta-row').style.display='none';
+  npPartsOff = {};
   resetThumbField();
   showEditScreen();
   renderAllTagChips();
@@ -1691,11 +1786,15 @@ async function savePromptForm(){
     thumbnailUrl = null;
   }
 
+  const tagSet = new Set(japaneseTags.split(/、\s*/).map(s=>s.trim()).filter(Boolean));
+  const partsOff = {};
+  Object.keys(npPartsOff).forEach(k=>{ if(tagSet.has(k) && npPartsOff[k].length) partsOff[k] = [...npPartsOff[k]]; });
+
   if(editingPromptId){
     const p = prompts.find(x=>x.id===editingPromptId);
-    if(p){ p.name=name; p.category=category; p.japaneseTags=japaneseTags; p.japaneseSentence=japaneseSentence; p.positiveSentence=positiveSentence; p.thumbnailUrl=thumbnailUrl||null; p.updatedAt=Date.now(); }
+    if(p){ p.partsOff=partsOff; p.name=name; p.category=category; p.japaneseTags=japaneseTags; p.japaneseSentence=japaneseSentence; p.positiveSentence=positiveSentence; p.thumbnailUrl=thumbnailUrl||null; p.updatedAt=Date.now(); }
   }else{
-    const np = {id:savedId, name, category, japaneseTags, japaneseSentence, positiveSentence, thumbnailUrl:thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:null};
+    const np = {id:savedId, name, category, partsOff, japaneseTags, japaneseSentence, positiveSentence, thumbnailUrl:thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:null};
     prompts.unshift(np);
   }
   await savePrompts();
@@ -1719,7 +1818,7 @@ document.getElementById('np-name-copy-pos').addEventListener('click', (ev)=>{ co
 document.getElementById('promptSearch').addEventListener('input', renderPromptList);
 
 function assembledPositive(p){
-  const enTags = derivedEnglishTagsFromText(p.japaneseTags||'');
+  const enTags = derivedEnglishTagsFromText(p.japaneseTags||'', p.partsOff);
   return [data.settings.triggerWord, data.settings.qualityPrefix, enTags.join(', '), p.positiveSentence].filter(Boolean).join(', ');
 }
 function renderPromptList(){
@@ -1829,6 +1928,7 @@ function openEditForm(p){
   document.getElementById('np-ja-tags').value = p.japaneseTags||'';
   document.getElementById('np-ja-sentence').value = p.japaneseSentence||'';
   document.getElementById('np-pos-sentence').value = p.positiveSentence||'';
+  npPartsOff = JSON.parse(JSON.stringify(p.partsOff||{}));
   loadThumbField(p.thumbnailUrl);
 
   document.getElementById('np-meta-row').style.display = 'block';
@@ -1844,7 +1944,7 @@ function openEditForm(p){
   };
   document.getElementById('np-meta-timestamp').textContent = formatTimestamp(p.updatedAt||p.createdAt);
   document.getElementById('np-clone-btn').onclick = async ()=>{
-    const clone = {id:uid(), name:p.name+' のコピー', category:p.category||'', japaneseTags:p.japaneseTags||'', japaneseSentence:p.japaneseSentence||'', positiveSentence:p.positiveSentence||'', thumbnailUrl:p.thumbnailUrl||null, status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:p.id};
+    const clone = {id:uid(), name:p.name+' のコピー', category:p.category||'', japaneseTags:p.japaneseTags||'', japaneseSentence:p.japaneseSentence||'', positiveSentence:p.positiveSentence||'', thumbnailUrl:p.thumbnailUrl||null, partsOff:JSON.parse(JSON.stringify(p.partsOff||{})), status:'untested', createdAt:Date.now(), updatedAt:Date.now(), parentId:p.id};
     prompts.unshift(clone);
     await savePrompts();
     openEditForm(clone);
@@ -1870,6 +1970,10 @@ let orgTab = 'tags';
 const orgOpen = new Set();      // 'c:'+catId / groupId / 'u:'+catId / 'pc:'+name
 let orgEditingPhraseId = null;
 let orgDrag = null;             // {kind, id, catId, name}
+const orgSelPhrases = new Map(); // phraseId -> catId
+const orgSelGroups = new Map();  // groupId -> catId
+const orgSelPrompts = new Set(); // promptId
+let orgDestValue = '';
 
 function promptCatList(){
   const list = [...(data.settings.promptCategories||[])];
@@ -1884,6 +1988,7 @@ function showOrganizerScreen(){
   document.getElementById('backupResult').style.display = 'none';
   document.getElementById('organizerScreen').style.display = 'block';
   orgEditingPhraseId = null;
+  orgSelPhrases.clear(); orgSelGroups.clear(); orgSelPrompts.clear(); orgDestValue = '';
   renderOrganizer();
 }
 function renderOrganizer(){
@@ -1907,7 +2012,124 @@ function orgHandle(){ const h = document.createElement('span'); h.className = 'o
 function orgArrow(open){ const a = document.createElement('span'); a.textContent = open ? '▼' : '▶'; a.style.cssText = 'font-size:9px;width:10px;display:inline-block;flex-shrink:0;'; return a; }
 function orgSpacer(){ const s = document.createElement('span'); s.style.flex = '1'; return s; }
 function orgToggle(key){ if(orgOpen.has(key)) orgOpen.delete(key); else orgOpen.add(key); renderOrganizer(); }
+function orgCheckbox(isChecked, onChange){
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.checked = isChecked; cb.className = 'org-cb';
+  cb.title = '選択（上のバーからまとめて移動）';
+  cb.addEventListener('click', (ev)=>ev.stopPropagation());
+  cb.addEventListener('change', ()=>{ onChange(cb.checked); updateOrgSelBar(); });
+  return cb;
+}
 
+/* ---- 選択バー（まとめて移動） ---- */
+function orgPruneSelection(){
+  [...orgSelPhrases].forEach(([pid,cid])=>{ const c = getBuilderCat(cid); if(!c || !c.phrases.some(p=>p.id===pid)) orgSelPhrases.delete(pid); });
+  [...orgSelGroups].forEach(([gid,cid])=>{ const c = getBuilderCat(cid); if(!c || !findGroupLoc(c,gid)) orgSelGroups.delete(gid); });
+  [...orgSelPrompts].forEach(id=>{ if(!prompts.some(p=>p.id===id)) orgSelPrompts.delete(id); });
+}
+function orgDestOptionsHtml(){
+  let html = '<option value="">移動先を選択…</option>';
+  builderCats.forEach(cat=>{
+    html += `<optgroup label="${escHtml(cat.name)}">`;
+    html += `<option value="cat:${escHtml(cat.id)}">${escHtml(cat.name)}（直下）</option>`;
+    flattenGroups(cat).forEach(({node, depth})=>{
+      html += `<option value="grp:${escHtml(cat.id)}:${escHtml(node.id)}">${'　'.repeat(depth+1)}${escHtml(node.name)}</option>`;
+    });
+    html += '</optgroup>';
+  });
+  return html;
+}
+function orgPromptDestOptionsHtml(){
+  let html = '<option value="">移動先カテゴリを選択…</option><option value="__none__">未分類</option>';
+  promptCatList().forEach(n=>{ html += `<option value="${escHtml(n)}">${escHtml(n)}</option>`; });
+  return html;
+}
+function updateOrgSelBar(){
+  orgPruneSelection();
+  const bar = document.getElementById('orgSelBar');
+  if(!bar) return;
+  const isTags = orgTab==='tags';
+  const n = isTags ? (orgSelPhrases.size + orgSelGroups.size) : orgSelPrompts.size;
+  bar.innerHTML = '';
+  if(n===0){ bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const label = document.createElement('span');
+  label.style.fontWeight = '600';
+  label.textContent = `${n}件選択中`;
+  bar.appendChild(label);
+  const sel = document.createElement('select');
+  sel.innerHTML = isTags ? orgDestOptionsHtml() : orgPromptDestOptionsHtml();
+  sel.style.cssText = 'width:auto;max-width:260px;';
+  sel.value = orgDestValue;
+  if(sel.value!==orgDestValue) sel.value = '';
+  sel.addEventListener('change', ()=>{ orgDestValue = sel.value; });
+  bar.appendChild(sel);
+  const mv = document.createElement('button');
+  mv.className = 'btn small primary'; mv.textContent = 'ここへ移動';
+  mv.addEventListener('click', ()=>{ if(isTags) orgMoveSelectedTags(sel.value); else orgMoveSelectedPrompts(sel.value); });
+  bar.appendChild(mv);
+  const clr = document.createElement('button');
+  clr.className = 'btn small'; clr.textContent = '選択解除';
+  clr.addEventListener('click', ()=>{
+    orgSelPhrases.clear(); orgSelGroups.clear(); orgSelPrompts.clear();
+    renderOrganizer();
+  });
+  bar.appendChild(clr);
+}
+
+async function orgMoveSelectedTags(destVal){
+  if(!destVal){ alert('移動先を選択してください。'); return; }
+  let target;
+  if(destVal.startsWith('cat:')) target = {kind:'cat', catId:destVal.slice(4)};
+  else { const parts = destVal.split(':'); target = {kind:'group', catId:parts[1], id:parts[2]}; }
+  const dstCat = getBuilderCat(target.catId);
+  if(!dstCat) return;
+
+  const selGroups = [...orgSelGroups].map(([id,catId])=>({id,catId}));
+  const selIds = new Set(selGroups.map(g=>g.id));
+  const topGroups = selGroups.filter(g=>{
+    const cat = getBuilderCat(g.catId);
+    if(!cat || !findGroupLoc(cat, g.id)) return false;
+    return !groupAncestorIds(cat, g.id).slice(0,-1).some(a=>selIds.has(a));
+  });
+  const coveredGroupIds = new Set();
+  topGroups.forEach(g=>{
+    const cat = getBuilderCat(g.catId); const loc = findGroupLoc(cat, g.id);
+    subtreeIds(loc.node).forEach(i=>coveredGroupIds.add(i));
+  });
+  const phrases = [...orgSelPhrases].map(([id,catId])=>({id,catId})).filter(x=>{
+    const cat = getBuilderCat(x.catId);
+    const ph = cat && cat.phrases.find(p=>p.id===x.id);
+    return ph && !(ph.groupId && coveredGroupIds.has(ph.groupId));
+  });
+
+  let moved = 0, skipped = 0;
+  topGroups.forEach(g=>{
+    const r = orgMutate({kind:'group', id:g.id, catId:g.catId}, target, 'inside');
+    if(r==='tags') moved++; else skipped++;
+  });
+  phrases.forEach(x=>{
+    const r = orgMutate({kind:'phrase', id:x.id, catId:x.catId}, target, 'inside');
+    if(r==='tags') moved++; else skipped++;
+  });
+  orgSelPhrases.clear(); orgSelGroups.clear();
+  orgOpen.add('c:'+target.catId);
+  if(target.kind==='group') groupAncestorIds(dstCat, target.id).forEach(id=>orgOpen.add(id));
+  else orgOpen.add('u:'+target.catId);
+  await saveBuilderCats();
+  renderOrgTags();
+  if(skipped>0) alert(`${skipped}件は移動先がその項目の内側のため、移動できませんでした。`);
+}
+async function orgMoveSelectedPrompts(destVal){
+  if(destVal===''){ alert('移動先を選択してください。'); return; }
+  const name = destVal==='__none__' ? '' : destVal;
+  [...orgSelPrompts].forEach(id=>orgMutate({kind:'prompt', id}, {kind:'pcat', name}, 'inside'));
+  orgSelPrompts.clear();
+  await savePrompts();
+  renderOrgPrompts();
+}
+
+/* ---- ドラッグ&ドロップ ---- */
 function orgClearIndicators(){
   document.querySelectorAll('.org-drop-before,.org-drop-after,.org-drop-inside').forEach(el=>{
     el.classList.remove('org-drop-before','org-drop-after','org-drop-inside');
@@ -1987,16 +2209,16 @@ function orgAttachDrop(row, target){
   });
 }
 
-/* ---- ドロップ処理（データ操作） ---- */
-async function orgApplyDrop(drag, target, zone){
+/* ---- データ操作（保存・再描画なし）。変更があれば 'tags' / 'prompts' / 'pcat' を返す ---- */
+function orgMutate(drag, target, zone){
   if(drag.kind==='phrase'){
     const srcCat = getBuilderCat(drag.catId);
     const dstCat = getBuilderCat(target.catId);
     const ph = srcCat && srcCat.phrases.find(p=>p.id===drag.id);
-    if(!ph || !dstCat) return;
+    if(!ph || !dstCat) return null;
     if(target.kind==='phrase'){
       const ref = dstCat.phrases.find(p=>p.id===target.id);
-      if(!ref || ref.id===ph.id) return;
+      if(!ref || ref.id===ph.id) return null;
       const gid = ref.groupId;
       srcCat.phrases = srcCat.phrases.filter(p=>p.id!==ph.id);
       if(gid) ph.groupId = gid; else delete ph.groupId;
@@ -2010,21 +2232,20 @@ async function orgApplyDrop(drag, target, zone){
       dstCat.phrases.push(ph);
     }
     orgOpen.add('c:'+dstCat.id);
-    await saveBuilderCats(); renderOrgTags();
-    return;
+    return 'tags';
   }
   if(drag.kind==='group'){
     const srcCat = getBuilderCat(drag.catId);
     const dstCat = getBuilderCat(target.catId);
     const loc = srcCat && findGroupLoc(srcCat, drag.id);
-    if(!loc || !dstCat || target.kind==='phrase') return;
+    if(!loc || !dstCat || target.kind==='phrase') return null;
     const node = loc.node;
     const ids = subtreeIds(node);
     let destArr, ref = null;
     if(target.kind==='group'){
-      if(srcCat===dstCat && ids.includes(target.id)) return;
+      if(srcCat===dstCat && ids.includes(target.id)) return null;
       const tl = findGroupLoc(dstCat, target.id);
-      if(!tl) return;
+      if(!tl) return null;
       if(zone==='inside'){ destArr = tl.node.children; orgOpen.add(target.id); }
       else { destArr = tl.arr; ref = tl.node; }
     }else{
@@ -2040,26 +2261,24 @@ async function orgApplyDrop(drag, target, zone){
       dstCat.phrases.push(...moving);
     }
     orgOpen.add('c:'+dstCat.id);
-    await saveBuilderCats(); renderOrgTags();
-    return;
+    return 'tags';
   }
   if(drag.kind==='cat'){
     const from = builderCats.findIndex(c=>c.id===drag.id);
-    if(from<0) return;
+    if(from<0) return null;
     const [moved] = builderCats.splice(from, 1);
     let idx = builderCats.findIndex(c=>c.id===target.catId);
-    if(idx<0){ builderCats.splice(from, 0, moved); return; }
+    if(idx<0){ builderCats.splice(from, 0, moved); return null; }
     if(zone==='after') idx++;
     builderCats.splice(idx, 0, moved);
-    await saveBuilderCats(); renderOrgTags();
-    return;
+    return 'tags';
   }
   if(drag.kind==='prompt'){
     const p = prompts.find(x=>x.id===drag.id);
-    if(!p) return;
+    if(!p) return null;
     if(target.kind==='prow'){
       const ref = prompts.find(x=>x.id===target.id);
-      if(!ref || ref.id===p.id) return;
+      if(!ref || ref.id===p.id) return null;
       prompts = prompts.filter(x=>x.id!==p.id);
       p.category = ref.category || '';
       let idx = prompts.findIndex(x=>x.id===ref.id);
@@ -2068,22 +2287,28 @@ async function orgApplyDrop(drag, target, zone){
     }else if(target.kind==='pcat'){
       p.category = target.name || '';
       orgOpen.add('pc:'+(target.name||''));
-    }
-    await savePrompts(); renderOrgPrompts();
-    return;
+    }else return null;
+    return 'prompts';
   }
   if(drag.kind==='pcat'){
     const list = promptCatList();
     const from = list.indexOf(drag.name);
-    if(from<0 || !target.name) return;
+    if(from<0 || !target.name) return null;
     list.splice(from, 1);
     let idx = list.indexOf(target.name);
-    if(idx<0) return;
+    if(idx<0) return null;
     if(zone==='after') idx++;
     list.splice(idx, 0, drag.name);
     data.settings.promptCategories = list;
-    await saveSettings(); renderOrgPrompts();
+    return 'pcat';
   }
+  return null;
+}
+async function orgApplyDrop(drag, target, zone){
+  const r = orgMutate(drag, target, zone);
+  if(r==='tags'){ await saveBuilderCats(); renderOrgTags(); }
+  else if(r==='prompts'){ await savePrompts(); renderOrgPrompts(); }
+  else if(r==='pcat'){ await saveSettings(); renderOrgPrompts(); }
 }
 
 /* ---- タグの整理 ---- */
@@ -2118,14 +2343,16 @@ function renderOrgTags(){
 
   const hint = document.createElement('p');
   hint.className = 'org-hint';
-  hint.textContent = '行をつかんでドラッグ：サブカテゴリの行の真ん中にドロップ＝その中へ移動／上端・下端にドロップ＝同じ階層で並び替え。カテゴリの行にドロップすると、そのカテゴリの未分類へ移動します。';
+  hint.textContent = 'タグやサブカテゴリの左のチェックボックスで選ぶと、上に「移動先」のバーが出ます。まとめて移動できます。ドラッグでも移動できます（サブカテゴリの行の真ん中にドロップ＝その中へ／上端・下端＝同じ階層で並び替え）。';
   wrap.appendChild(hint);
 
   if(builderCats.length===0){
     const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'カテゴリがありません。'; wrap.appendChild(e);
+    updateOrgSelBar();
     return;
   }
   builderCats.forEach(cat=>wrap.appendChild(buildOrgCatBox(cat)));
+  updateOrgSelBar();
 }
 
 function buildOrgCatBox(cat){
@@ -2136,14 +2363,17 @@ function buildOrgCatBox(cat){
 
   const head = orgRowEl();
   head.style.cssText = `border-left:5px solid ${color};background:${color}22;font-weight:600;`;
-  const handle = orgHandle();
-  head.appendChild(handle);
+  head.appendChild(orgHandle());
   head.appendChild(orgArrow(open));
   const nm = document.createElement('span'); nm.textContent = cat.name; nm.style.cursor = 'pointer';
   head.appendChild(nm);
   const cnt = document.createElement('span'); cnt.className = 'org-count'; cnt.textContent = `(${cat.phrases.length})`;
   head.appendChild(cnt);
   head.appendChild(orgSpacer());
+  head.appendChild(orgBtn(cat.partToggle ? '🧩パーツ切替：有効' : '🧩パーツ切替：無効',
+    'タグの英語を「,」区切りのパーツ単位でON/OFFできるようにします（衣装向け）。クリックで切替',
+    async ()=>{ cat.partToggle = !cat.partToggle; await saveBuilderCats(); renderOrgTags(); },
+    cat.partToggle ? 'org-btn-on' : ''));
   head.appendChild(orgBtn('＋', 'サブカテゴリを追加', async ()=>{
     const name = prompt(`「${cat.name}」の中にサブカテゴリを追加`); if(!name || !name.trim()) return;
     const node = {id:uid(), name:name.trim(), children:[]};
@@ -2190,6 +2420,7 @@ function orgRenderGroups(cat, arr, depth, parentEl, color){
     const open = orgOpen.has(node.id);
     const row = orgRowEl();
     row.style.cssText = `padding-left:${8+(depth+1)*18}px;font-weight:600;background:${color}${depth%2?'1c':'12'};`;
+    row.appendChild(orgCheckbox(orgSelGroups.has(node.id), on=>{ if(on) orgSelGroups.set(node.id, cat.id); else orgSelGroups.delete(node.id); }));
     row.appendChild(orgHandle());
     row.appendChild(orgArrow(open));
     const nm = document.createElement('span'); nm.textContent = node.name; nm.style.cursor = 'pointer';
@@ -2221,8 +2452,8 @@ function orgRenderGroups(cat, arr, depth, parentEl, color){
     orgAttachDrop(row, {kind:'group', id:node.id, catId:cat.id});
     parentEl.appendChild(row);
     if(open){
-      cat.phrases.filter(p=>p.groupId===node.id).forEach(ph=>parentEl.appendChild(orgPhraseRow(cat, ph, depth+1, color)));
       orgRenderGroups(cat, node.children||[], depth+1, parentEl, color);
+      cat.phrases.filter(p=>p.groupId===node.id).forEach(ph=>parentEl.appendChild(orgPhraseRow(cat, ph, depth+1, color)));
     }
   });
 }
@@ -2231,12 +2462,16 @@ function orgPhraseRow(cat, ph, depth, color){
   const row = orgRowEl();
   row.style.cssText = `padding-left:${8+(depth+1)*18}px;border-left:4px solid ${color};background:${color}0d;`;
   if(orgEditingPhraseId===ph.id){
-    row.innerHTML = `<input type="text" class="oe-ja" value="${escHtml(ph.japanese)}" style="flex:1;min-width:0;"><input type="text" class="oe-en" value="${escHtml(ph.english||'')}" style="flex:1;min-width:0;">`;
+    row.style.flexWrap = 'wrap';
+    row.innerHTML = `<input type="text" class="oe-ja" value="${escHtml(ph.japanese)}" style="flex:1 1 100%;min-width:0;"><textarea class="oe-en" rows="1" style="flex:1 1 100%;min-width:0;resize:none;overflow:hidden;">${escHtml(ph.english||'')}</textarea>`;
+    const ta = row.querySelector('.oe-en');
+    ta.addEventListener('input', ()=>autoGrowTextarea(ta));
+    setTimeout(()=>autoGrowTextarea(ta), 0);
     const ok = document.createElement('button'); ok.className = 'btn small primary'; ok.textContent = '保存';
     ok.addEventListener('click', async ()=>{
       const ja = row.querySelector('.oe-ja').value.trim();
       if(!ja) return;
-      ph.japanese = ja; ph.english = row.querySelector('.oe-en').value.trim();
+      ph.japanese = ja; ph.english = ta.value.replace(/\s*\n\s*/g,' ').trim();
       orgEditingPhraseId = null; await saveBuilderCats(); renderOrgTags();
     });
     const ng = document.createElement('button'); ng.className = 'btn small'; ng.textContent = 'キャンセル';
@@ -2244,14 +2479,11 @@ function orgPhraseRow(cat, ph, depth, color){
     row.appendChild(ok); row.appendChild(ng);
     return row;
   }
+  row.appendChild(orgCheckbox(orgSelPhrases.has(ph.id), on=>{ if(on) orgSelPhrases.set(ph.id, cat.id); else orgSelPhrases.delete(ph.id); }));
   row.appendChild(orgHandle());
   const t = document.createElement('span'); t.style.flex = '1'; t.style.minWidth = '0';
   t.textContent = (ph.favorite ? '★ ' : '') + ph.japanese;
-  if(ph.english){
-    const e = document.createElement('span');
-    e.style.cssText = 'color:var(--text-3);font-size:11.5px;margin-left:6px;';
-    e.textContent = ph.english; t.appendChild(e);
-  }
+  if(ph.english) t.title = ph.english;
   row.appendChild(t);
   row.appendChild(orgBtn('✎', 'タグを編集', ()=>{ orgEditingPhraseId = ph.id; renderOrgTags(); }));
   row.appendChild(orgBtn('×', 'タグを削除', async ()=>{
@@ -2290,15 +2522,17 @@ function renderOrgPrompts(){
 
   const hint = document.createElement('p');
   hint.className = 'org-hint';
-  hint.textContent = '名前の欄はそのまま書き換えられます。左の ⠿ をつかんでドラッグすると、別のカテゴリへ移動・並び替えができます。';
+  hint.textContent = '名前の欄はそのまま書き換えられます。左のチェックボックスで選ぶと、上の「移動先」バーからまとめて別カテゴリへ移動できます。⠿ をつかんでドラッグしても移動・並び替えができます。';
   wrap.appendChild(hint);
 
   if(prompts.length===0 && promptCatList().length===0){
     const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'プロンプトがありません。'; wrap.appendChild(e);
+    updateOrgSelBar();
     return;
   }
   promptCatList().forEach(n=>wrap.appendChild(buildOrgPromptCat(n)));
   wrap.appendChild(buildOrgPromptCat(''));
+  updateOrgSelBar();
 }
 
 function buildOrgPromptCat(name){
@@ -2352,6 +2586,7 @@ function buildOrgPromptCat(name){
 function orgPromptRow(p){
   const row = orgRowEl();
   row.style.paddingLeft = '14px';
+  row.appendChild(orgCheckbox(orgSelPrompts.has(p.id), on=>{ if(on) orgSelPrompts.add(p.id); else orgSelPrompts.delete(p.id); }));
   const handle = orgHandle();
   row.appendChild(handle);
   if(p.thumbnailUrl){
@@ -2379,8 +2614,8 @@ function orgPromptRow(p){
 /* ---- 画面の入口・イベント ---- */
 document.getElementById('organizerBtn').addEventListener('click', ()=>showOrganizerScreen());
 document.getElementById('orgBackBtn').addEventListener('click', ()=>{ showListScreen(); renderPromptList(); });
-document.getElementById('orgTabTags').addEventListener('click', ()=>{ orgTab = 'tags'; renderOrganizer(); });
-document.getElementById('orgTabPrompts').addEventListener('click', ()=>{ orgTab = 'prompts'; renderOrganizer(); });
+document.getElementById('orgTabTags').addEventListener('click', ()=>{ orgTab = 'tags'; orgSelPrompts.clear(); orgDestValue = ''; renderOrganizer(); });
+document.getElementById('orgTabPrompts').addEventListener('click', ()=>{ orgTab = 'prompts'; orgSelPhrases.clear(); orgSelGroups.clear(); orgDestValue = ''; renderOrganizer(); });
 
 
 /* ---------- backup export / import ---------- */
