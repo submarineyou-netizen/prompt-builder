@@ -96,6 +96,17 @@
   .part-chip{border:1px solid var(--border-strong);background:var(--panel);color:var(--text);border-radius:14px;padding:3px 10px;font-size:12px;cursor:pointer;text-align:left;font-family:var(--sans);}
   .part-chip.on{background:var(--teal-dim);border-color:var(--teal);color:var(--teal);}
   .part-chip.off{opacity:.55;text-decoration:line-through;}
+  .news-day{font-size:12px;font-weight:600;color:var(--text-2);margin:14px 0 6px;}
+  .news-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);margin-bottom:6px;cursor:pointer;}
+  .news-row:hover{border-color:var(--teal);}
+  .news-badge{font-size:10px;border-radius:4px;padding:2px 7px;font-family:var(--mono);flex-shrink:0;}
+  .news-badge.prompt{background:var(--teal-dim);color:var(--teal);}
+  .news-badge.tag{background:var(--amber-dim);color:var(--amber);}
+  .news-title{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .news-sub{font-size:11.5px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .news-time{font-size:11px;color:var(--text-3);flex-shrink:0;font-family:var(--mono);}
+  .org-flash{animation:orgflash 1.8s ease-out;}
+  @keyframes orgflash{0%{background:#ffe27a;box-shadow:0 0 0 3px #ffd23f;}100%{background:transparent;box-shadow:0 0 0 0 transparent;}}
   .org-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;}
   .org-toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;align-items:center;}
   .org-hint{font-size:11.5px;color:var(--text-3);margin:0 0 10px;line-height:1.5;}
@@ -232,6 +243,7 @@
     <div class="toprow" id="listToprow">
       <input type="text" id="promptSearch" placeholder="名前・本文・メモで検索…" style="max-width:280px;">
       <button class="btn primary" id="newPromptBtn" style="margin-left:auto;">+ 新しいプロンプト</button>
+      <button class="btn small" id="newsBtn">🆕 新着</button>
       <button class="btn small" id="organizerBtn">🗂 整理</button>
       <button class="btn small" id="exportBtn">バックアップ書き出し</button>
       <label class="btn small" for="importBackupFile" style="cursor:pointer;">バックアップ読み込み
@@ -373,6 +385,18 @@
       </div>
     </div>
     <div id="promptList"></div>
+    <div id="newsScreen" style="display:none;">
+      <div class="org-head">
+        <button class="btn small" id="newsBackBtn">← 一覧に戻る</button>
+        <span style="font-weight:600;font-size:15px;">🆕 新着</span>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <button class="btn small primary" id="newsFilterAll">すべて</button>
+          <button class="btn small" id="newsFilterPrompt">プロンプト</button>
+          <button class="btn small" id="newsFilterTag">タグ</button>
+        </div>
+      </div>
+      <div id="newsList"></div>
+    </div>
     <div id="organizerScreen" style="display:none;">
       <div class="org-head">
         <button class="btn small" id="orgBackBtn">← 一覧に戻る</button>
@@ -448,6 +472,8 @@ function loadXlsxLib(){
 let data = { categories: [], settings: { triggerWord:'ohwx muse', qualityPrefix:'', negativeCommon:'' } };
 let prompts = [];
 let editingPromptId = null;
+let editReturn = 'list';   // 編集画面を閉じたとき戻る先: 'list' | 'news'
+let orgReturn = 'list';    // 整理ページの「戻る」の行き先: 'list' | 'news'
 let selectedThumbFile = null;
 let thumbRemoved = false;
 let expandedPromptCats = new Set();
@@ -1202,7 +1228,7 @@ document.getElementById('builderAddPhrase').addEventListener('click', async ()=>
     groupId = node.id;
     lastOpenedSub = node.id;
   }
-  const ph = {id:uid(), japanese, english};
+  const ph = {id:uid(), japanese, english, createdAt:Date.now()};
   if(groupId) ph.groupId = groupId;
   cat.phrases.push(ph);
   if(groupId) groupAncestorIds(cat, groupId).forEach(id=>expandedSubs.add(id));
@@ -1263,7 +1289,7 @@ function importBuilderRows(rows){
     let cat = builderCats.find(c=>c.name===catName);
     if(!cat){ cat = {id:uid(), name:catName, phrases:[]}; builderCats.push(cat); }
     if(!cat.phrases.some(p=>p.japanese===japanese)){
-      cat.phrases.push({id:uid(), japanese, english});
+      cat.phrases.push({id:uid(), japanese, english, createdAt:Date.now()});
       added++;
     }
     catsTouched.add(catName);
@@ -1699,13 +1725,19 @@ document.getElementById('np-thumb-remove').addEventListener('click', ()=>{
 function showEditScreen(){
   document.getElementById('newPromptForm').classList.add('open');
   document.getElementById('organizerScreen').style.display = 'none';
+  document.getElementById('newsScreen').style.display = 'none';
   document.getElementById('promptList').style.display = 'none';
   document.getElementById('listToprow').style.display = 'none';
   document.getElementById('backupResult').style.display = 'none';
 }
+function leaveEditScreen(){
+  const back = editReturn; editReturn = 'list';
+  if(back==='news') showNewsScreen(); else showListScreen();
+}
 function showListScreen(){
   document.getElementById('newPromptForm').classList.remove('open');
   document.getElementById('organizerScreen').style.display = 'none';
+  document.getElementById('newsScreen').style.display = 'none';
   document.getElementById('promptList').style.display = '';
   document.getElementById('listToprow').style.display = '';
   document.getElementById('backupResult').style.display = '';
@@ -1713,6 +1745,7 @@ function showListScreen(){
 
 document.getElementById('newPromptBtn').addEventListener('click', ()=>{
   editingPromptId = null;
+  editReturn = 'list';
   document.getElementById('np-name').value='';
   document.getElementById('np-category').value='';
   document.getElementById('np-ja-tags').value='';
@@ -1727,7 +1760,7 @@ document.getElementById('newPromptBtn').addEventListener('click', ()=>{
   document.getElementById('np-name').focus();
 });
 function cancelPromptForm(){
-  showListScreen();
+  leaveEditScreen();
   editingPromptId = null;
 }
 function compressImage(file, maxDim, quality){
@@ -1798,9 +1831,9 @@ async function savePromptForm(){
     prompts.unshift(np);
   }
   await savePrompts();
-  showListScreen();
-  editingPromptId = null;
   renderPromptList();
+  leaveEditScreen();
+  editingPromptId = null;
 }
 function copyLivePositive(btn){
   const text = assembledPositiveLive();
@@ -1954,9 +1987,9 @@ function openEditForm(p){
     if(!confirm(`「${p.name}」を削除しますか？`)) return;
     prompts = prompts.filter(x=>x.id!==p.id);
     await savePrompts();
-    showListScreen();
-    editingPromptId = null;
     renderPromptList();
+    leaveEditScreen();
+    editingPromptId = null;
   };
 
   showEditScreen();
@@ -1981,7 +2014,10 @@ function promptCatList(){
   return list;
 }
 
-function showOrganizerScreen(){
+function showOrganizerScreen(from){
+  orgReturn = (from==='news') ? 'news' : 'list';
+  document.getElementById('orgBackBtn').textContent = orgReturn==='news' ? '← 新着に戻る' : '← 一覧に戻る';
+  document.getElementById('newsScreen').style.display = 'none';
   document.getElementById('newPromptForm').classList.remove('open');
   document.getElementById('promptList').style.display = 'none';
   document.getElementById('listToprow').style.display = 'none';
@@ -2460,6 +2496,7 @@ function orgRenderGroups(cat, arr, depth, parentEl, color){
 
 function orgPhraseRow(cat, ph, depth, color){
   const row = orgRowEl();
+  row.dataset.phraseId = ph.id;
   row.style.cssText = `padding-left:${8+(depth+1)*18}px;border-left:4px solid ${color};background:${color}0d;`;
   if(orgEditingPhraseId===ph.id){
     row.style.flexWrap = 'wrap';
@@ -2612,10 +2649,162 @@ function orgPromptRow(p){
 }
 
 /* ---- 画面の入口・イベント ---- */
-document.getElementById('organizerBtn').addEventListener('click', ()=>showOrganizerScreen());
-document.getElementById('orgBackBtn').addEventListener('click', ()=>{ showListScreen(); renderPromptList(); });
+document.getElementById('organizerBtn').addEventListener('click', ()=>showOrganizerScreen('list'));
+document.getElementById('orgBackBtn').addEventListener('click', ()=>{
+  const back = orgReturn; orgReturn = 'list';
+  if(back==='news') showNewsScreen(); else { showListScreen(); renderPromptList(); }
+});
 document.getElementById('orgTabTags').addEventListener('click', ()=>{ orgTab = 'tags'; orgSelPrompts.clear(); orgDestValue = ''; renderOrganizer(); });
 document.getElementById('orgTabPrompts').addEventListener('click', ()=>{ orgTab = 'prompts'; orgSelPhrases.clear(); orgSelGroups.clear(); orgDestValue = ''; renderOrganizer(); });
+
+
+/* ================= 新着 ================= */
+let newsFilter = 'all';   // 'all' | 'prompt' | 'tag'
+let newsLimit = 50;
+
+function showNewsScreen(){
+  document.getElementById('newPromptForm').classList.remove('open');
+  document.getElementById('organizerScreen').style.display = 'none';
+  document.getElementById('promptList').style.display = 'none';
+  document.getElementById('listToprow').style.display = 'none';
+  document.getElementById('backupResult').style.display = 'none';
+  document.getElementById('newsScreen').style.display = 'block';
+  newsLimit = 50;
+  renderNews();
+}
+
+function collectNewsItems(){
+  const items = [];
+  prompts.forEach(p=>{ if(p.createdAt) items.push({kind:'prompt', ts:p.createdAt, p}); });
+  builderCats.forEach(cat=>{
+    cat.phrases.forEach(ph=>{ if(ph.createdAt) items.push({kind:'tag', ts:ph.createdAt, cat, ph}); });
+  });
+  items.sort((a,b)=>b.ts-a.ts);
+  return items;
+}
+
+function newsDayInfo(ts){
+  const d = new Date(ts);
+  const ymd = x=>x.getFullYear()*10000 + (x.getMonth()+1)*100 + x.getDate();
+  const pad = n=>String(n).padStart(2,'0');
+  let label = `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())}（${'日月火水木金土'[d.getDay()]}）`;
+  const today = new Date();
+  const yest = new Date(); yest.setDate(yest.getDate()-1);
+  if(ymd(d)===ymd(today)) label = '今日　' + label;
+  else if(ymd(d)===ymd(yest)) label = '昨日　' + label;
+  return {key:ymd(d), label};
+}
+function newsTimeText(ts){
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function newsTagLocation(cat, ph){
+  const flat = flattenGroups(cat);
+  const g = ph.groupId ? flat.find(x=>x.node.id===ph.groupId) : null;
+  return cat.name + (g ? ' › ' + g.label : '');
+}
+
+function buildNewsRow(it){
+  const row = document.createElement('div');
+  row.className = 'news-row';
+  const badge = document.createElement('span');
+  badge.className = 'news-badge ' + it.kind;
+  badge.textContent = it.kind==='prompt' ? 'プロンプト' : 'タグ';
+  row.appendChild(badge);
+
+  if(it.kind==='prompt'){
+    const p = it.p;
+    if(p.thumbnailUrl){
+      const im = document.createElement('img');
+      im.src = p.thumbnailUrl; im.loading = 'lazy'; im.className = 'org-thumb';
+      row.appendChild(im);
+    }
+    const box = document.createElement('div');
+    box.style.cssText = 'flex:1;min-width:0;';
+    const nm = document.createElement('div'); nm.className = 'news-title'; nm.textContent = p.name;
+    const sub = document.createElement('div'); sub.className = 'news-sub'; sub.textContent = p.category || '未分類';
+    box.appendChild(nm); box.appendChild(sub);
+    row.appendChild(box);
+    row.title = 'クリックで編集画面へ';
+    row.addEventListener('click', ()=>{ editReturn = 'news'; openEditForm(p); });
+  }else{
+    const box = document.createElement('div');
+    box.style.cssText = 'flex:1;min-width:0;';
+    const nm = document.createElement('div'); nm.className = 'news-title'; nm.textContent = it.ph.japanese;
+    if(it.ph.english) nm.title = it.ph.english;
+    const sub = document.createElement('div'); sub.className = 'news-sub'; sub.textContent = '📍 ' + newsTagLocation(it.cat, it.ph);
+    box.appendChild(nm); box.appendChild(sub);
+    row.appendChild(box);
+    row.title = 'クリックで配置されている場所へ';
+    row.addEventListener('click', ()=>newsRevealTag(it.cat.id, it.ph.id));
+  }
+  const tm = document.createElement('span');
+  tm.className = 'news-time'; tm.textContent = newsTimeText(it.ts);
+  row.appendChild(tm);
+  return row;
+}
+
+function renderNews(){
+  ['all','prompt','tag'].forEach(k=>{
+    const id = k==='all' ? 'newsFilterAll' : (k==='prompt' ? 'newsFilterPrompt' : 'newsFilterTag');
+    document.getElementById(id).className = 'btn small' + (newsFilter===k ? ' primary' : '');
+  });
+  const wrap = document.getElementById('newsList');
+  wrap.innerHTML = '';
+  const items = collectNewsItems().filter(it=>newsFilter==='all' || it.kind===newsFilter);
+  if(items.length===0){
+    const e = document.createElement('div'); e.className = 'empty';
+    e.textContent = newsFilter==='tag' ? 'まだ新着のタグはありません。' : '新着はありません。';
+    wrap.appendChild(e);
+  }
+  let lastKey = null;
+  items.slice(0, newsLimit).forEach(it=>{
+    const di = newsDayInfo(it.ts);
+    if(di.key!==lastKey){
+      const h = document.createElement('div'); h.className = 'news-day'; h.textContent = di.label;
+      wrap.appendChild(h); lastKey = di.key;
+    }
+    wrap.appendChild(buildNewsRow(it));
+  });
+  if(items.length>newsLimit){
+    const more = document.createElement('button');
+    more.className = 'btn small'; more.textContent = `もっと見る（残り${items.length-newsLimit}件）`;
+    more.addEventListener('click', ()=>{ newsLimit += 50; renderNews(); });
+    wrap.appendChild(more);
+  }
+  if(newsFilter!=='prompt'){
+    const note = document.createElement('p');
+    note.className = 'org-hint'; note.style.marginTop = '14px';
+    note.textContent = 'タグは、この機能の追加後に登録したものから表示されます（それ以前のタグは登録日が記録されていません）。';
+    wrap.appendChild(note);
+  }
+}
+
+/* タグ → 整理ページ（タグ）で配置場所まで開いて、その行へジャンプ */
+function newsRevealTag(catId, phId){
+  const cat = getBuilderCat(catId);
+  const ph = cat && cat.phrases.find(p=>p.id===phId);
+  if(!ph) return;
+  orgTab = 'tags';
+  orgOpen.add('c:'+catId);
+  const valid = new Set(flattenGroups(cat).map(x=>x.node.id));
+  if(ph.groupId && valid.has(ph.groupId)) groupAncestorIds(cat, ph.groupId).forEach(id=>orgOpen.add(id));
+  else orgOpen.add('u:'+catId);
+  showOrganizerScreen('news');
+  const row = document.querySelector(`#orgTagsView [data-phrase-id="${phId}"]`);
+  if(row){
+    row.scrollIntoView({block:'center'});
+    row.classList.add('org-flash');
+    setTimeout(()=>row.classList.remove('org-flash'), 1900);
+  }
+}
+
+document.getElementById('newsBtn').addEventListener('click', ()=>showNewsScreen());
+document.getElementById('newsBackBtn').addEventListener('click', ()=>{ showListScreen(); renderPromptList(); });
+document.getElementById('newsFilterAll').addEventListener('click', ()=>{ newsFilter = 'all'; newsLimit = 50; renderNews(); });
+document.getElementById('newsFilterPrompt').addEventListener('click', ()=>{ newsFilter = 'prompt'; newsLimit = 50; renderNews(); });
+document.getElementById('newsFilterTag').addEventListener('click', ()=>{ newsFilter = 'tag'; newsLimit = 50; renderNews(); });
 
 
 /* ---------- backup export / import ---------- */
@@ -2661,7 +2850,7 @@ document.getElementById('importBackupFile').addEventListener('change', async (e)
         let cat = builderCats.find(c=>c.name===bc.name);
         if(!cat){ cat = {id:uid(), name:bc.name, phrases:[]}; builderCats.push(cat); }
         (bc.phrases||[]).forEach(bp=>{
-          if(!cat.phrases.some(p=>p.japanese===bp.japanese)) cat.phrases.push({id:uid(), japanese:bp.japanese, english:bp.english||''});
+          if(!cat.phrases.some(p=>p.japanese===bp.japanese)) cat.phrases.push({id:uid(), japanese:bp.japanese, english:bp.english||'', ...(bp.createdAt ? {createdAt:bp.createdAt} : {})});
         });
       });
       (backup.prompts||[]).forEach(bp=>{
